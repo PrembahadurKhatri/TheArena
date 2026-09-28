@@ -27,7 +27,7 @@ export default function Home() {
         <div className="pointer-events-none absolute -bottom-24 -right-24 h-80 w-80 rounded-full bg-premium/10 blur-[130px]" />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgb(var(--c-border)/0.35)_1px,transparent_1px),linear-gradient(90deg,rgb(var(--c-border)/0.35)_1px,transparent_1px)] bg-[size:56px_56px] [mask-image:radial-gradient(ellipse_80%_60%_at_50%_0%,black,transparent)]" />
 
-        <div className="container-x relative grid min-h-[80vh] items-center gap-10 py-28 md:grid-cols-2 md:gap-8">
+        <div className="container-x relative grid items-center gap-8 py-16 md:min-h-[80vh] md:grid-cols-2 md:gap-8 md:py-28">
           <div>
             <Reveal>
               <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-surface/80 px-4 py-2 text-xs font-semibold uppercase tracking-widest text-accent shadow-[0_0_24px_-6px_rgb(var(--c-accent)/0.6)]">
@@ -127,7 +127,7 @@ export default function Home() {
       </section>
 
       {/* SPORTS GRID */}
-      <section className="relative py-24">
+      <section className="relative py-14 md:py-24">
         <div className="container-x">
           <Reveal>
             <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-surface px-4 py-1.5 text-xs font-semibold uppercase tracking-widest text-accent">
@@ -158,7 +158,7 @@ export default function Home() {
       </section>
 
       {/* HOW IT WORKS */}
-      <section className="relative border-t border-border bg-surface/30 py-24">
+      <section className="relative border-t border-border bg-surface/30 py-14 md:py-24">
         <div className="container-x">
           <Reveal>
             <span className="eyebrow">How it works</span>
@@ -172,7 +172,7 @@ export default function Home() {
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {/* STEP 01 — Build your squad */}
             <Reveal delay={0}>
-              <div className="spotlight glass group relative h-full min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-blue-500/40">
+              <div className="spotlight glass group relative h-full min-h-0 md:min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-blue-500/40">
                 <div className="spotlight-bg pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-blue-500/20 blur-[80px]" />
 
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-sky-600 text-white shadow-lg shadow-blue-500/30">
@@ -217,7 +217,7 @@ export default function Home() {
 
             {/* STEP 02 — Compete in tournaments */}
             <Reveal delay={0.08}>
-              <div className="spotlight glass group relative h-full min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-violet-500/40">
+              <div className="spotlight glass group relative h-full min-h-0 md:min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-violet-500/40">
                 <div className="spotlight-bg pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-violet-500/20 blur-[80px]" />
                 <Trophy className="spotlight-bg pointer-events-none absolute -bottom-6 -right-6 h-40 w-40 text-violet-500/10" />
 
@@ -246,7 +246,7 @@ export default function Home() {
 
             {/* STEP 03 — Book verified grounds */}
             <Reveal delay={0.16}>
-              <div className="spotlight glass group relative h-full min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-emerald-500/40">
+              <div className="spotlight glass group relative h-full min-h-0 md:min-h-[21rem] overflow-hidden rounded-2xl p-7 transition-colors duration-300 hover:border-emerald-500/40">
                 <div className="spotlight-bg pointer-events-none absolute -right-12 -top-12 h-48 w-48 rounded-full bg-emerald-500/20 blur-[80px]" />
 
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30">
@@ -280,11 +280,11 @@ export default function Home() {
       </section>
 
       {/* PREMIUM TEASER */}
-      <section className="relative overflow-hidden py-24">
+      <section className="relative overflow-hidden py-14 md:py-24">
         <div className="pointer-events-none absolute right-0 top-1/2 h-80 w-80 -translate-y-1/2 rounded-full bg-premium/10 blur-[140px]" />
         <div className="container-x">
           <Reveal>
-            <div className="spotlight glass relative overflow-hidden rounded-3xl p-10 md:p-16">
+            <div className="spotlight glass relative overflow-hidden rounded-3xl p-7 md:p-16">
               <div className="spotlight-bg grain absolute inset-0 opacity-60" />
               <div className="relative flex flex-col items-start gap-6 md:flex-row md:items-center md:justify-between">
                 <div className="max-w-xl">
