@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Crown, LogOut, Menu, User, X } from "lucide-react";
+import { ChevronDown, Crown, LogOut, Menu, User, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV_LINKS = [
@@ -34,25 +34,34 @@ export default function Navbar() {
   }
 
   const linkClass = ({ isActive }: { isActive: boolean }) =>
-    `text-sm font-medium tracking-wide transition-colors ${
-      isActive ? "text-accent" : "text-ink-muted hover:text-ink"
+    `relative rounded-full px-3.5 py-2 text-sm font-medium tracking-wide transition-all duration-300 ${
+      isActive ? "bg-accent-soft text-accent" : "text-ink-muted hover:bg-surface hover:text-ink"
     }`;
 
   return (
     <header
-      className={`sticky top-0 z-50 transition-all ${
-        scrolled ? "border-b border-border bg-base/85 backdrop-blur-xl" : "border-b border-transparent bg-transparent"
+      className={`sticky top-0 z-50 border-b backdrop-blur-xl transition-all duration-300 ${
+        scrolled ? "border-border bg-base/90 shadow-lg shadow-black/20" : "border-border/50 bg-base/50"
       }`}
     >
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-accent/40 to-transparent" />
+
       <div className="container-x flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
-          <img src="/logo.png" alt="The Arena" className="h-9 w-9 object-contain" />
+        <Link to="/" className="group flex items-center gap-2.5" onClick={() => setOpen(false)}>
+          <span className="relative flex h-9 w-9 items-center justify-center">
+            <span className="absolute inset-0 rounded-full bg-accent/40 opacity-0 blur-md transition-opacity duration-300 group-hover:opacity-100" />
+            <img
+              src="/logo.png"
+              alt="The Arena"
+              className="relative h-9 w-9 object-contain transition-transform duration-300 group-hover:scale-110"
+            />
+          </span>
           <span className="font-display text-lg font-bold tracking-wide text-ink">
             THE <span className="text-gradient-accent">ARENA</span>
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-7 lg:flex">
+        <nav className="hidden items-center gap-1 lg:flex">
           {NAV_LINKS.map((link) => (
             <NavLink key={link.to} to={link.to} className={linkClass}>
               {link.label}
@@ -65,7 +74,7 @@ export default function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setMenuOpen((v) => !v)}
-                className="flex items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3.5 hover:border-accent/40"
+                className="flex items-center gap-2 rounded-full border border-border bg-surface py-1.5 pl-1.5 pr-3 transition-colors hover:border-accent/40 hover:bg-surface-2"
               >
                 {user.photo ? (
                   <img src={user.photo} alt={user.name} className="h-7 w-7 rounded-full object-cover" />
@@ -75,7 +84,10 @@ export default function Navbar() {
                   </div>
                 )}
                 <span className="text-sm font-medium text-ink">{user.name.split(" ")[0]}</span>
-                {user.isPremium && <Crown className="h-3.5 w-3.5 text-premium" />}
+                {user.isPremium && <Crown className="h-3.5 w-3.5 text-premium drop-shadow-[0_0_6px_rgb(var(--c-premium)/0.7)]" />}
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-ink-faint transition-transform duration-300 ${menuOpen ? "rotate-180" : ""}`}
+                />
               </button>
 
               <AnimatePresence>
@@ -113,12 +125,16 @@ export default function Navbar() {
             </div>
           ) : (
             <>
-              <Link to="/login" className="text-sm font-medium text-ink-muted hover:text-ink">
+              <span className="h-5 w-px bg-border" />
+              <Link
+                to="/login"
+                className="rounded-full px-4 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+              >
                 Login
               </Link>
               <Link
                 to="/register"
-                className="shine rounded-full bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent/90"
+                className="shine rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_20px_-6px_rgb(var(--c-accent)/0.7)] transition-all hover:bg-accent/90 hover:shadow-[0_0_24px_-4px_rgb(var(--c-accent)/0.9)]"
               >
                 Register
               </Link>
@@ -127,7 +143,7 @@ export default function Navbar() {
         </div>
 
         <button
-          className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-ink lg:hidden"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border text-ink transition-colors hover:border-accent/40 hover:bg-surface lg:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
         >
