@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { CalendarDays, Plus, Trophy, Users } from "lucide-react";
 import api from "@/api/axios";
-import { SPORTS, getSportBySlug } from "@/data/sports";
+import { SPORT_FILTER_OPTIONS, getSportBySlug } from "@/data/sports";
 import type { TournamentSummary } from "@/types";
 import { apiError } from "@/types";
 import Reveal from "@/components/Reveal";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
-import { Select } from "@/components/ui/Field";
+import CustomSelect from "@/components/ui/CustomSelect";
 import { StatusBadge } from "@/components/ui/Badge";
 import { useSpotlight } from "@/hooks/useSpotlight";
 
@@ -52,7 +52,12 @@ function TournamentCard({ t, index }: { t: TournamentSummary; index: number }) {
   );
 }
 
-const STATUS_OPTIONS = ["upcoming", "ongoing", "completed"];
+const STATUS_FILTER_OPTIONS = [
+  { value: "", label: "All Statuses" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "ongoing", label: "Ongoing" },
+  { value: "completed", label: "Completed" },
+];
 
 export default function Tournaments() {
   const [params, setParams] = useSearchParams();
@@ -108,22 +113,18 @@ export default function Tournaments() {
 
         <Reveal delay={0.14}>
           <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <Select value={sport} onChange={(e) => updateParam("sport", e.target.value)} className="sm:w-56">
-              <option value="">All sports</option>
-              {SPORTS.map((s) => (
-                <option key={s.slug} value={s.slug}>
-                  {s.emoji} {s.name}
-                </option>
-              ))}
-            </Select>
-            <Select value={status} onChange={(e) => updateParam("status", e.target.value)} className="sm:w-56">
-              <option value="">All statuses</option>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s} className="capitalize">
-                  {s[0].toUpperCase() + s.slice(1)}
-                </option>
-              ))}
-            </Select>
+            <CustomSelect
+              value={sport}
+              onChange={(v) => updateParam("sport", v)}
+              options={SPORT_FILTER_OPTIONS}
+              className="sm:w-56"
+            />
+            <CustomSelect
+              value={status}
+              onChange={(v) => updateParam("status", v)}
+              options={STATUS_FILTER_OPTIONS}
+              className="sm:w-56"
+            />
           </div>
         </Reveal>
 

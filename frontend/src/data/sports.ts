@@ -98,3 +98,11 @@ export const SPORTS: SportDef[] = [
 export function getSportBySlug(slug: string) {
   return SPORTS.find((s) => s.slug === slug);
 }
+
+// Shared option list for "filter by sport" dropdowns (CustomSelect), with
+// an "All Sports" entry prepended — keeps every browse page's filter
+// consistent instead of each page re-building this list.
+export const SPORT_FILTER_OPTIONS = [
+  { value: "", label: "All Sports" },
+  ...SPORTS.map((s) => ({ value: s.slug, label: s.name, icon: s.emoji, color: s.color })),
+];

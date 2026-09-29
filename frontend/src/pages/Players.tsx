@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Crown, Search, User } from "lucide-react";
 import api from "@/api/axios";
-import { SPORTS, getSportBySlug } from "@/data/sports";
+import { SPORT_FILTER_OPTIONS, getSportBySlug } from "@/data/sports";
 import type { PlayerSummary } from "@/types";
 import { apiError } from "@/types";
 import Reveal from "@/components/Reveal";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
-import { Input, Select } from "@/components/ui/Field";
+import { Input } from "@/components/ui/Field";
+import CustomSelect from "@/components/ui/CustomSelect";
 import { useSpotlight } from "@/hooks/useSpotlight";
 
 function PlayerCard({ player, index }: { player: PlayerSummary; index: number }) {
@@ -107,14 +108,12 @@ export default function Players() {
                 className="pl-11"
               />
             </form>
-            <Select value={sport} onChange={(e) => updateParam("sport", e.target.value)} className="sm:w-56">
-              <option value="">All sports</option>
-              {SPORTS.map((s) => (
-                <option key={s.slug} value={s.slug}>
-                  {s.emoji} {s.name}
-                </option>
-              ))}
-            </Select>
+            <CustomSelect
+              value={sport}
+              onChange={(v) => updateParam("sport", v)}
+              options={SPORT_FILTER_OPTIONS}
+              className="sm:w-56"
+            />
           </div>
         </Reveal>
 

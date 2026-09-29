@@ -7,7 +7,9 @@ import type { RankingEntry, PlayerSummary, TeamSummary } from "@/types";
 import { apiError } from "@/types";
 import Reveal from "@/components/Reveal";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
-import { Select } from "@/components/ui/Field";
+import CustomSelect from "@/components/ui/CustomSelect";
+
+const SPORT_OPTIONS = SPORTS.map((s) => ({ value: s.slug, label: s.name, icon: s.emoji, color: s.color }));
 
 type Tab = "players" | "teams";
 
@@ -61,13 +63,7 @@ export default function Rankings() {
               </button>
             ))}
           </div>
-          <Select value={sport} onChange={(e) => updateSport(e.target.value)} className="sm:w-56">
-            {SPORTS.map((s) => (
-              <option key={s.slug} value={s.slug}>
-                {s.emoji} {s.name}
-              </option>
-            ))}
-          </Select>
+          <CustomSelect value={sport} onChange={updateSport} options={SPORT_OPTIONS} className="sm:w-56" />
         </div>
 
         <div className="mt-8">
