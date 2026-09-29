@@ -6,8 +6,8 @@ import { toTournamentSummary, toTournamentDetail, toMatchJSON, toTeamSummary } f
 import * as tournamentsService from "../services/tournamentsService";
 
 export const listTournaments = asyncHandler(async (req: Request, res: Response) => {
-  const { sport, status } = req.query as { sport?: string; status?: string };
-  const tournaments = await tournamentsService.listTournaments({ sport, status });
+  const { sport, status, province } = req.query as { sport?: string; status?: string; province?: string };
+  const tournaments = await tournamentsService.listTournaments({ sport, status, province });
   res.status(200).json({ tournaments: tournaments.map(toTournamentSummary) });
 });
 
@@ -19,13 +19,15 @@ export const getTournament = asyncHandler(async (req: Request, res: Response) =>
 
 export const createTournament = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Authentication required");
-  const { name, sport, maxTeams, startDate, description } = req.body;
+  const { name, sport, maxTeams, startDate, description, province, location } = req.body;
   const tournament = await tournamentsService.createTournament(req.user, {
     name,
     sport,
     maxTeams,
     startDate,
     description,
+    province,
+    location,
   });
   res.status(201).json({ tournament: toTournamentSummary(tournament) });
 });

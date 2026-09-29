@@ -50,6 +50,8 @@ export interface TournamentSummary {
   teamsCount: number;
   startDate: string;
   organizer: ApiUserRef;
+  province: string;
+  location?: string;
 }
 
 // The subset of team fields the backend actually populates onto a Match

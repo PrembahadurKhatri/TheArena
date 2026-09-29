@@ -5,9 +5,11 @@ import { Crown, LogIn, Trophy } from "lucide-react";
 import api from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
 import { SPORTS } from "@/data/sports";
+import { PROVINCE_OPTIONS } from "@/data/provinces";
 import { apiError } from "@/types";
 import Reveal from "@/components/Reveal";
 import { Input, Select, Textarea } from "@/components/ui/Field";
+import CustomSelect from "@/components/ui/CustomSelect";
 import Button from "@/components/ui/Button";
 
 export default function TournamentCreate() {
@@ -19,6 +21,8 @@ export default function TournamentCreate() {
     maxTeams: "8",
     startDate: "",
     description: "",
+    province: user?.province ?? "",
+    location: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +33,10 @@ export default function TournamentCreate() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!form.province) {
+      setError("Please select a province.");
+      return;
+    }
     setError("");
     setLoading(true);
     try {
@@ -38,6 +46,8 @@ export default function TournamentCreate() {
         maxTeams: Number(form.maxTeams),
         startDate: form.startDate,
         description: form.description || undefined,
+        province: form.province,
+        location: form.location || undefined,
       });
       navigate(`/tournaments/${data.tournament.id}`);
     } catch (err) {
@@ -133,6 +143,26 @@ export default function TournamentCreate() {
               value={form.startDate}
               onChange={(e) => set("startDate", e.target.value)}
             />
+            <div className="grid gap-5 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-ink-muted">
+                  Province <span className="text-accent">*</span>
+                </label>
+                <CustomSelect
+                  value={form.province}
+                  onChange={(v) => set("province", v)}
+                  options={PROVINCE_OPTIONS}
+                  placeholder="Select province"
+                />
+                <span className="text-xs text-ink-faint">Used to show this tournament in players' "Near Me" results.</span>
+              </div>
+              <Input
+                label="Venue"
+                value={form.location}
+                onChange={(e) => set("location", e.target.value)}
+                placeholder="e.g. Dasharath Stadium (optional)"
+              />
+            </div>
             <Textarea
               label="Description"
               value={form.description}

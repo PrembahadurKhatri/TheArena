@@ -7,8 +7,8 @@ import { fileToUrlPath } from "../utils/upload";
 import * as authService from "../services/authService";
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, password, phone } = req.body;
-  const { token, user } = await authService.registerUser({ name, email, password, phone });
+  const { name, email, password, phone, location, province } = req.body;
+  const { token, user } = await authService.registerUser({ name, email, password, phone, location, province });
   res.status(201).json({ token, user: toUserJSON(user) });
 });
 

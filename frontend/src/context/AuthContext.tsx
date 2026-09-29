@@ -8,6 +8,8 @@ export interface ArenaUser {
   email: string;
   phone?: string;
   photo?: string;
+  location?: string;
+  province?: string;
   isPremium: boolean;
   membershipExpiresAt?: string | null;
   role: "player" | "admin";
@@ -17,7 +19,14 @@ interface AuthContextValue {
   user: ArenaUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (payload: { name: string; email: string; password: string; phone?: string }) => Promise<void>;
+  register: (payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    location?: string;
+    province?: string;
+  }) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -57,7 +66,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   }
 
-  async function register(payload: { name: string; email: string; password: string; phone?: string }) {
+  async function register(payload: {
+    name: string;
+    email: string;
+    password: string;
+    phone?: string;
+    location?: string;
+    province?: string;
+  }) {
     const { data } = await api.post("/auth/register", payload);
     localStorage.setItem("arena_token", data.token);
     setUser(data.user);

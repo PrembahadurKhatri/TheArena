@@ -5,6 +5,7 @@ import { Team } from "../models/Team";
 import { IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
 import { isValidSportSlug } from "../utils/sports";
+import { isValidProvince } from "../utils/provinces";
 import { recordMatchResult } from "./rankingsService";
 
 const TEAM_SUMMARY_POPULATE = { path: "owner", select: "name" };
@@ -14,10 +15,11 @@ const DETAIL_POPULATE = [
   { path: "teams", populate: TEAM_SUMMARY_POPULATE },
 ];
 
-export async function listTournaments(filters: { sport?: string; status?: string }) {
+export async function listTournaments(filters: { sport?: string; status?: string; province?: string }) {
   const query: any = {};
   if (filters.sport) query.sport = filters.sport;
   if (filters.status) query.status = filters.status;
+  if (filters.province) query.province = filters.province;
 
   return Tournament.find(query).populate("organizer", "name").sort({ startDate: 1 });
 }
@@ -35,13 +37,22 @@ export async function getTournamentWithMatches(id: string) {
 
 export async function createTournament(
   organizer: IUser,
-  input: { name: string; sport: string; maxTeams: number; startDate: string; description?: string }
+  input: {
+    name: string;
+    sport: string;
+    maxTeams: number;
+    startDate: string;
+    description?: string;
+    province: string;
+    location?: string;
+  }
 ) {
-  const { name, sport, maxTeams, startDate, description } = input;
-  if (!name || !sport || !maxTeams || !startDate) {
-    throw new AppError(400, "name, sport, maxTeams and startDate are required");
+  const { name, sport, maxTeams, startDate, description, province, location } = input;
+  if (!name || !sport || !maxTeams || !startDate || !province) {
+    throw new AppError(400, "name, sport, maxTeams, startDate and province are required");
   }
   if (!isValidSportSlug(sport)) throw new AppError(400, `Invalid sport slug: ${sport}`);
+  if (!isValidProvince(province)) throw new AppError(400, `Invalid province: ${province}`);
   if (Number(maxTeams) < 2) throw new AppError(400, "maxTeams must be at least 2");
 
   const tournament = await Tournament.create({
@@ -51,6 +62,8 @@ export async function createTournament(
     maxTeams: Number(maxTeams),
     startDate: new Date(startDate),
     description,
+    province,
+    location,
     teams: [],
     status: "upcoming",
   });

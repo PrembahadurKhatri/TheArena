@@ -1,5 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 import { SPORT_SLUG_ENUM } from "../utils/sports";
+import { PROVINCES } from "../utils/provinces";
 
 export interface IUser extends Document {
   _id: Types.ObjectId;
@@ -8,6 +9,8 @@ export interface IUser extends Document {
   passwordHash: string;
   phone?: string;
   photo?: string | null;
+  location?: string;
+  province?: string;
   isPremium: boolean;
   membershipExpiresAt: Date | null;
   role: "player" | "admin";
@@ -25,6 +28,8 @@ const userSchema = new Schema<IUser>(
     passwordHash: { type: String, required: true, select: false },
     phone: { type: String },
     photo: { type: String, default: null },
+    location: { type: String, trim: true },
+    province: { type: String, enum: PROVINCES },
     isPremium: { type: Boolean, default: false },
     membershipExpiresAt: { type: Date, default: null },
     role: { type: String, enum: ["player", "admin"], default: "player" },

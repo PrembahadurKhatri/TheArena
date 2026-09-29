@@ -13,6 +13,8 @@ export function toUserJSON(user: any) {
     email: user.email,
     phone: user.phone ?? undefined,
     photo: user.photo ?? null,
+    location: user.location ?? undefined,
+    province: user.province ?? undefined,
     isPremium: !!user.isPremium,
     membershipExpiresAt: user.membershipExpiresAt ? new Date(user.membershipExpiresAt).toISOString() : null,
     role: user.role,
@@ -84,6 +86,8 @@ export function toTournamentSummary(t: any) {
     teamsCount: Array.isArray(t.teams) ? t.teams.length : 0,
     startDate: t.startDate ? new Date(t.startDate).toISOString() : null,
     organizer: toOwnerRef(t.organizer),
+    province: t.province,
+    location: t.location ?? undefined,
   };
 }
 

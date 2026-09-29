@@ -1,5 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 import { SPORT_SLUG_ENUM } from "../utils/sports";
+import { PROVINCES } from "../utils/provinces";
 
 export type TournamentStatus = "upcoming" | "ongoing" | "completed";
 
@@ -14,6 +15,8 @@ export interface ITournament extends Document {
   winner: Types.ObjectId | null;
   startDate: Date;
   description?: string;
+  province: string;
+  location?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +32,8 @@ const tournamentSchema = new Schema<ITournament>(
     winner: { type: Schema.Types.ObjectId, ref: "Team", default: null },
     startDate: { type: Date, required: true },
     description: { type: String },
+    province: { type: String, required: true, enum: PROVINCES },
+    location: { type: String, trim: true },
   },
   { timestamps: true }
 );

@@ -5,13 +5,24 @@ import { AppError } from "../utils/AppError";
 import { signToken } from "../utils/jwt";
 import { sendEmail } from "../utils/sendEmail";
 import { isValidSportSlug } from "../utils/sports";
+import { isValidProvince } from "../utils/provinces";
 
 const SALT_ROUNDS = 10;
 
-export async function registerUser(input: { name: string; email: string; password: string; phone?: string }) {
-  const { name, email, password, phone } = input;
+export async function registerUser(input: {
+  name: string;
+  email: string;
+  password: string;
+  phone?: string;
+  location?: string;
+  province?: string;
+}) {
+  const { name, email, password, phone, location, province } = input;
   if (!name || !email || !password) {
     throw new AppError(400, "name, email and password are required");
+  }
+  if (province && !isValidProvince(province)) {
+    throw new AppError(400, `Invalid province: ${province}`);
   }
 
   const existing = await User.findOne({ email: email.toLowerCase() });
@@ -25,6 +36,8 @@ export async function registerUser(input: { name: string; email: string; passwor
     email: email.toLowerCase(),
     passwordHash,
     phone,
+    location,
+    province,
   });
 
   const token = signToken(user._id, user.role);
@@ -53,11 +66,25 @@ export async function loginUser(input: { email: string; password: string }) {
 
 export async function updateMe(
   user: IUser,
-  updates: { name?: string; phone?: string; photo?: string; sportPreferences?: string[] }
+  updates: {
+    name?: string;
+    phone?: string;
+    photo?: string;
+    location?: string;
+    province?: string;
+    sportPreferences?: string[];
+  }
 ) {
   if (updates.name !== undefined) user.name = updates.name;
   if (updates.phone !== undefined) user.phone = updates.phone;
   if (updates.photo !== undefined) user.photo = updates.photo;
+  if (updates.location !== undefined) user.location = updates.location;
+  if (updates.province !== undefined) {
+    if (updates.province && !isValidProvince(updates.province)) {
+      throw new AppError(400, `Invalid province: ${updates.province}`);
+    }
+    user.province = updates.province;
+  }
   if (updates.sportPreferences !== undefined) {
     const prefs = Array.isArray(updates.sportPreferences) ? updates.sportPreferences : [updates.sportPreferences];
     for (const p of prefs) {

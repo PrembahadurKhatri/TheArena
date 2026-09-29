@@ -18,12 +18,23 @@ OTHER model (`Team`, `Tournament`, `Ground`, `PlayerRanking`, etc.) stores `spor
 **plain lowercase slug string** (not an ObjectId ref), validated against this fixed list.
 This keeps queries simple (`Team.find({ sport: "cricket" })`, no populate needed).
 
+## Provinces (fixed, exactly these 7 — Nepal's provinces, used as plain strings)
+
+```
+Koshi Province, Madhesh Province, Bagmati Province, Gandaki Province, Lumbini Province, Karnali Province, Sudurpashchim Province
+```
+
+Defined in `backend/src/utils/provinces.ts` and mirrored in `frontend/src/data/provinces.ts`.
+A user's `province` (set at registration, editable later) and a tournament's `province`
+(set by its organizer at creation) are matched against each other to power the
+Tournaments page's "Near Me" filter — see `GET /api/tournaments` below.
+
 ## Auth
 
-- `POST /api/auth/register` — body `{ name, email, password, phone? }` → `201 { token, user }`
+- `POST /api/auth/register` — body `{ name, email, password, phone?, location?, province? }` → `201 { token, user }`
 - `POST /api/auth/login` — body `{ email, password }` → `200 { token, user }`
 - `GET /api/auth/me` — Bearer token → `200 { user }`
-- `PATCH /api/auth/me` — Bearer token, multipart if `photo` file included, else JSON. Body: any of `{ name, phone, photo, sportPreferences[] }` → `200 { user }`
+- `PATCH /api/auth/me` — Bearer token, multipart if `photo` file included, else JSON. Body: any of `{ name, phone, photo, location, province, sportPreferences[] }` → `200 { user }`
 - `POST /api/auth/forgot-password` — body `{ email }` → `200 { message }` (emails a reset link if SMTP configured, else logs the link to console — see `backend/src/utils/sendEmail.ts` pattern)
 - `POST /api/auth/reset-password/:token` — body `{ password }` → `200 { message }`
 
@@ -35,6 +46,8 @@ This keeps queries simple (`Team.find({ sport: "cricket" })`, no populate needed
   email: string
   phone?: string
   photo?: string | null   // "/uploads/xxx.jpg" or null
+  location?: string       // free-text, e.g. "Pokhara"
+  province?: string       // one of the 7 provinces above
   isPremium: boolean
   membershipExpiresAt: string | null // ISO date
   role: "player" | "admin"
@@ -79,15 +92,15 @@ if `req.user.isPremium` is false or `membershipExpiresAt` has passed.
 
 ## Tournaments
 
-- `GET /api/tournaments?sport=<slug>&status=<upcoming|ongoing|completed>` → `200 { tournaments: [TournamentSummary] }`
+- `GET /api/tournaments?sport=<slug>&status=<upcoming|ongoing|completed>&province=<province>` → `200 { tournaments: [TournamentSummary] }`. The frontend's "Near Me" toggle passes the logged-in user's own `province` as this param — it's a plain equality filter, nothing geo/coordinate-based.
 - `GET /api/tournaments/:id` → `200 { tournament: TournamentDetail }` (includes `matches[]`)
-- `POST /api/tournaments` — auth + **premium required** (`requirePremium` middleware). Body `{ name, sport, maxTeams, startDate, description? }` → `201 { tournament }`
+- `POST /api/tournaments` — auth + **premium required** (`requirePremium` middleware). Body `{ name, sport, maxTeams, startDate, province, description?, location? }` → `201 { tournament }`. `province` is required (one of the 7 provinces); `location` is optional free text (e.g. a venue name).
 - `POST /api/tournaments/:id/register-team` — auth, caller must own the team. Body `{ teamId }` → `200 { tournament }`. 400 if already full or already started.
 - `POST /api/tournaments/:id/start` — organizer only. Generates a single-elimination bracket from registered teams (shuffle, create round-1 `Match` docs with `round: 1`) and sets `status: "ongoing"` → `200 { tournament, matches }`
 - `PATCH /api/tournaments/:id/matches/:matchId` — organizer only. Body `{ scoreA, scoreB, winnerTeamId }`. Marks the match `completed`, and if every match in the current round is complete, auto-generates the next round's matches (`round: currentRound + 1`) pairing winners, until a final winner exists (then `tournament.status = "completed"`, `tournament.winner = teamId`). **Also updates `TeamRanking`/`PlayerRanking` win/loss points for that sport** on every match completion. → `200 { tournament, matches }`
 - `GET /api/tournaments/:id/standings` → `200 { standings: [{ team, wins, losses }] }`
 
-`TournamentSummary`: `{ id, name, sport, status, maxTeams, teamsCount, startDate, organizer: { id, name } }`
+`TournamentSummary`: `{ id, name, sport, status, maxTeams, teamsCount, startDate, organizer: { id, name }, province, location? }`
 `TournamentDetail`: `TournamentSummary & { teams: [TeamSummary], matches: [{ id, round, teamA, teamB, scoreA, scoreB, winner, status }], description }`
 
 ## Grounds & bookings

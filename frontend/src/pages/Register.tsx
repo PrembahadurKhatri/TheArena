@@ -4,14 +4,16 @@ import { Link, useNavigate } from "react-router-dom";
 import { UserPlus } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Input } from "@/components/ui/Field";
+import CustomSelect from "@/components/ui/CustomSelect";
 import Button from "@/components/ui/Button";
 import Reveal from "@/components/Reveal";
 import { apiError } from "@/types";
+import { PROVINCE_OPTIONS } from "@/data/provinces";
 
 export default function Register() {
   const { register } = useAuth();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", location: "", province: "" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -29,6 +31,8 @@ export default function Register() {
         email: form.email,
         password: form.password,
         phone: form.phone || undefined,
+        location: form.location || undefined,
+        province: form.province || undefined,
       });
       navigate("/dashboard");
     } catch (err) {
@@ -72,6 +76,23 @@ export default function Register() {
               onChange={(e) => set("phone", e.target.value)}
               placeholder="Optional"
             />
+            <div className="grid grid-cols-2 gap-3">
+              <Input
+                label="Location"
+                value={form.location}
+                onChange={(e) => set("location", e.target.value)}
+                placeholder="e.g. Pokhara"
+              />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium text-ink-muted">Province</label>
+                <CustomSelect
+                  value={form.province}
+                  onChange={(v) => set("province", v)}
+                  options={PROVINCE_OPTIONS}
+                  placeholder="Select province"
+                />
+              </div>
+            </div>
             <Input
               label="Password"
               type="password"

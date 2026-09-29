@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { CalendarDays, Plus, Trophy, Users } from "lucide-react";
+import { CalendarDays, MapPin, Plus, Trophy, Users } from "lucide-react";
 import api from "@/api/axios";
+import { useAuth } from "@/context/AuthContext";
 import { SPORT_FILTER_OPTIONS, getSportBySlug } from "@/data/sports";
 import type { TournamentSummary } from "@/types";
 import { apiError } from "@/types";
@@ -39,6 +40,13 @@ function TournamentCard({ t, index }: { t: TournamentSummary; index: number }) {
           <StatusBadge status={t.status} />
         </div>
 
+        {(t.province || t.location) && (
+          <span className="-mt-2 flex items-center gap-1.5 text-xs text-ink-faint">
+            <MapPin className="h-3 w-3 shrink-0" />
+            {t.location ? `${t.location}, ${t.province}` : t.province}
+          </span>
+        )}
+
         <div className="mt-auto flex items-center justify-between border-t border-border pt-4 text-sm text-ink-muted">
           <span className="flex items-center gap-1.5">
             <Users className="h-3.5 w-3.5" /> {t.teamsCount}/{t.maxTeams} teams
@@ -60,33 +68,52 @@ const STATUS_FILTER_OPTIONS = [
 ];
 
 export default function Tournaments() {
+  const { user } = useAuth();
   const [params, setParams] = useSearchParams();
   const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [nearMeNotice, setNearMeNotice] = useState("");
 
   const sport = params.get("sport") ?? "";
   const status = params.get("status") ?? "";
+  const nearMe = params.get("near") === "1";
+  const nearMeProvince = nearMe ? user?.province : undefined;
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setError("");
     api
-      .get("/tournaments", { params: { sport: sport || undefined, status: status || undefined } })
+      .get("/tournaments", {
+        params: { sport: sport || undefined, status: status || undefined, province: nearMeProvince || undefined },
+      })
       .then(({ data }) => alive && setTournaments(data.tournaments ?? []))
       .catch((err) => alive && setError(apiError(err, "Could not load tournaments.")))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [sport, status]);
+  }, [sport, status, nearMeProvince]);
 
   function updateParam(key: string, value: string) {
     const next = new URLSearchParams(params);
     if (value) next.set(key, value);
     else next.delete(key);
     setParams(next);
+  }
+
+  function toggleNearMe() {
+    if (!user) {
+      setNearMeNotice("Log in to see tournaments near you.");
+      return;
+    }
+    if (!user.province) {
+      setNearMeNotice('Set your province in your profile to use "Near Me".');
+      return;
+    }
+    setNearMeNotice("");
+    updateParam("near", nearMe ? "" : "1");
   }
 
   return (
@@ -112,7 +139,7 @@ export default function Tournaments() {
         </div>
 
         <Reveal delay={0.14}>
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <CustomSelect
               value={sport}
               onChange={(v) => updateParam("sport", v)}
@@ -125,7 +152,24 @@ export default function Tournaments() {
               options={STATUS_FILTER_OPTIONS}
               className="sm:w-56"
             />
+            <button
+              type="button"
+              onClick={toggleNearMe}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold transition-colors ${
+                nearMe
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "border-border bg-surface text-ink-muted hover:border-accent/40 hover:text-ink"
+              }`}
+            >
+              <MapPin className="h-4 w-4" /> Near Me
+            </button>
           </div>
+          {nearMeNotice && <p className="mt-3 text-xs text-premium">{nearMeNotice}</p>}
+          {nearMe && user?.province && (
+            <p className="mt-3 text-xs text-ink-faint">
+              Showing tournaments in <span className="font-semibold text-ink">{user.province}</span>.
+            </p>
+          )}
         </Reveal>
 
         <div className="mt-10">
@@ -134,7 +178,11 @@ export default function Tournaments() {
           {!loading && !error && tournaments.length === 0 && (
             <EmptyState
               title="No tournaments found"
-              message="Try different filters, or host your own tournament."
+              message={
+                nearMe
+                  ? "No tournaments in your province yet — try turning off Near Me, or host your own."
+                  : "Try different filters, or host your own tournament."
+              }
             />
           )}
           {!loading && !error && tournaments.length > 0 && (
