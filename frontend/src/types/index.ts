@@ -92,7 +92,7 @@ export interface GroundDetail extends GroundSummary {
   description?: string;
 }
 
-export type PaymentType = "ground_booking" | "membership";
+export type PaymentType = "ground_booking" | "membership" | "shop_order";
 export type PaymentStatus = "pending" | "success" | "failed";
 
 export interface PaymentSummary {
@@ -145,6 +145,58 @@ export interface MembershipMe {
   isPremium: boolean;
   membershipExpiresAt: string | null;
   activeMembership: MembershipSummary | null;
+}
+
+// --- Shop (multi-vendor marketplace) — mirrors API_CONTRACT.md "## Shop" exactly ---
+
+export interface StoreSummary {
+  id: string;
+  name: string;
+  description?: string;
+  logo: string | null;
+  owner: ApiUserRef;
+  productCount: number;
+}
+
+export interface StoreDetail extends StoreSummary {
+  products: ProductSummary[];
+}
+
+export interface ProductSummary {
+  id: string;
+  name: string;
+  price: number;
+  stock: number;
+  images: string[];
+  category: string;
+  sport?: string;
+  store: { id: string; name: string };
+}
+
+export interface ProductDetail extends ProductSummary {
+  description?: string;
+}
+
+export interface OrderItem {
+  product: string | null;
+  store: { id: string; name: string };
+  name: string;
+  price: number;
+  quantity: number;
+  image: string | null;
+}
+
+export type OrderStatus = "pending_payment" | "paid" | "cancelled";
+
+export interface OrderSummary {
+  id: string;
+  items: OrderItem[];
+  totalAmount: number;
+  status: OrderStatus;
+  shippingAddress: string;
+  shippingProvince?: string;
+  createdAt: string;
+  payment: PaymentSummary | null;
 }
 
 export function apiError(err: unknown, fallback = "Something went wrong. Please try again."): string {

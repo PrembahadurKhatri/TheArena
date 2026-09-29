@@ -1,10 +1,14 @@
 import dotenv from "dotenv";
 dotenv.config();
 
+import bcrypt from "bcrypt";
 import mongoose from "mongoose";
 import { connectDB } from "./config/db";
 import { Sport } from "./models/Sport";
 import { Ground } from "./models/Ground";
+import { User } from "./models/User";
+import { Store } from "./models/Store";
+import { Product } from "./models/Product";
 
 const SPORTS: { slug: string; name: string; order: number }[] = [
   { slug: "cricket", name: "Cricket", order: 1 },
@@ -71,6 +75,92 @@ const GROUNDS: {
   { sport: "futsal", name: "Lalitpur Futsal Arena", location: "Pulchowk, Lalitpur", pricePerHour: 1600, amenities: ["Artificial Turf", "Parking"] },
 ];
 
+const SEED_STORE_PASSWORD = "SeedStore123!";
+
+const STORE_SEEDS: {
+  ownerEmail: string;
+  ownerName: string;
+  storeName: string;
+  description: string;
+  province: string;
+  products: {
+    name: string;
+    description: string;
+    category: string;
+    sport: string | null;
+    price: number;
+    stock: number;
+  }[];
+}[] = [
+  {
+    ownerEmail: "store1@thearena.local",
+    ownerName: "Kathmandu Sports Hub Owner",
+    storeName: "Kathmandu Sports Hub",
+    description: "Your one-stop shop for cricket and football gear in the valley.",
+    province: "Bagmati Province",
+    products: [
+      { name: "SG Elite English Willow Cricket Bat", description: "Grade 1 English willow, full-size, pre-knocked.", category: "Bats", sport: "cricket", price: 12500, stock: 15 },
+      { name: "Kookaburra Turf Cricket Ball (Red)", description: "Match-quality leather cricket ball, 156g.", category: "Balls", sport: "cricket", price: 1800, stock: 60 },
+      { name: "Nivia Storm FIFA Football (Size 5)", description: "Thermally bonded match football.", category: "Balls", sport: "football", price: 3200, stock: 40 },
+      { name: "The Arena FC Home Jersey", description: "Breathable polyester jersey, club colours.", category: "Jerseys", sport: "football", price: 2200, stock: 50 },
+      { name: "Cricket Batting Pads (Youth)", description: "Lightweight protective leg guards for junior batters.", category: "Protective Gear", sport: "cricket", price: 3500, stock: 20 },
+      { name: "Arena Sports Water Bottle 1L", description: "BPA-free insulated sports bottle, fits any kit bag.", category: "Accessories", sport: null, price: 650, stock: 100 },
+    ],
+  },
+  {
+    ownerEmail: "store2@thearena.local",
+    ownerName: "Pokhara Gear Co. Owner",
+    storeName: "Pokhara Gear Co.",
+    description: "Footwear, rackets and everyday sports essentials from Pokhara.",
+    province: "Gandaki Province",
+    products: [
+      { name: "Yonex Voltric Badminton Racket", description: "Head-heavy racket for powerful smashes.", category: "Rackets", sport: "badminton", price: 8500, stock: 25 },
+      { name: "Nike Mercurial Football Boots", description: "Firm-ground boots with a lightweight synthetic upper.", category: "Footwear", sport: "football", price: 9800, stock: 18 },
+      { name: "Li-Ning Table Tennis Paddle Set", description: "Two paddles + 3 balls, tournament-grade rubber.", category: "Rackets", sport: "table-tennis", price: 2800, stock: 30 },
+      { name: "Volleyball Knee Pads", description: "Shock-absorbing foam pads for diving digs.", category: "Protective Gear", sport: "volleyball", price: 1200, stock: 45 },
+      { name: "Molten Basketball (Size 7)", description: "Composite leather indoor/outdoor basketball.", category: "Balls", sport: "basketball", price: 4200, stock: 22 },
+    ],
+  },
+];
+
+async function seedShop() {
+  console.log("[seed] upserting shop stores + products...");
+  for (const s of STORE_SEEDS) {
+    const passwordHash = await bcrypt.hash(SEED_STORE_PASSWORD, 10);
+    const owner = await User.findOneAndUpdate(
+      { email: s.ownerEmail },
+      {
+        $setOnInsert: { passwordHash },
+        $set: { name: s.ownerName, province: s.province },
+      },
+      { upsert: true, new: true }
+    );
+
+    const store = await Store.findOneAndUpdate(
+      { owner: owner._id },
+      { $set: { name: s.storeName, description: s.description } },
+      { upsert: true, new: true }
+    );
+
+    for (const p of s.products) {
+      await Product.findOneAndUpdate(
+        { store: store._id, name: p.name },
+        {
+          $set: {
+            description: p.description,
+            category: p.category,
+            sport: p.sport,
+            price: p.price,
+            stock: p.stock,
+          },
+        },
+        { upsert: true, new: true }
+      );
+    }
+  }
+  console.log(`[seed] ${STORE_SEEDS.length} stores upserted (test password: "${SEED_STORE_PASSWORD}")`);
+}
+
 async function seed() {
   await connectDB();
 
@@ -100,6 +190,8 @@ async function seed() {
     );
   }
   console.log(`[seed] ${GROUNDS.length} grounds upserted`);
+
+  await seedShop();
 
   console.log("[seed] done.");
   await mongoose.disconnect();

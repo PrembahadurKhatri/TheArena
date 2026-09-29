@@ -1,6 +1,7 @@
 import { Payment, MembershipPlan } from "../models/Payment";
 import { GroundBooking } from "../models/GroundBooking";
 import { Membership } from "../models/Membership";
+import { Order } from "../models/Order";
 import { User, IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
 
@@ -20,7 +21,7 @@ function getPlanPrice(plan: MembershipPlan): number {
 
 export async function checkout(
   user: IUser,
-  input: { type: "ground_booking" | "membership"; refId?: string; plan?: MembershipPlan }
+  input: { type: "ground_booking" | "membership" | "shop_order"; refId?: string; plan?: MembershipPlan }
 ) {
   const { type, refId, plan } = input;
 
@@ -69,7 +70,33 @@ export async function checkout(
     return payment;
   }
 
-  throw new AppError(400, 'type must be "ground_booking" or "membership"');
+  if (type === "shop_order") {
+    if (!refId) throw new AppError(400, "refId is required for shop_order payments");
+    const order = await Order.findById(refId);
+    if (!order) throw new AppError(404, "Order not found");
+    if (order.buyer.toString() !== user._id.toString()) {
+      throw new AppError(403, "You do not own this order");
+    }
+    if (order.status !== "pending_payment") {
+      throw new AppError(400, "This order is not awaiting payment");
+    }
+
+    const payment = await Payment.create({
+      user: user._id,
+      type: "shop_order",
+      refId: order._id,
+      amount: order.totalAmount,
+      status: "pending",
+      provider: "TEST",
+    });
+
+    order.payment = payment._id;
+    await order.save();
+
+    return payment;
+  }
+
+  throw new AppError(400, 'type must be "ground_booking", "membership" or "shop_order"');
 }
 
 async function getOwnedPaymentOrThrow(paymentId: string, user: IUser) {
@@ -119,6 +146,12 @@ export async function confirm(paymentId: string, user: IUser) {
     dbUser.isPremium = true;
     dbUser.membershipExpiresAt = expiresAt;
     await dbUser.save();
+  } else if (payment.type === "shop_order") {
+    const order = await Order.findById(payment.refId);
+    if (order) {
+      order.status = "paid";
+      await order.save();
+    }
   }
 
   return payment;

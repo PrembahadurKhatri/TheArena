@@ -163,6 +163,75 @@ export function toBookingSummary(b: any) {
   };
 }
 
+export function toStoreSummary(s: any) {
+  return {
+    id: s._id?.toString() ?? s.id,
+    name: s.name,
+    description: s.description ?? undefined,
+    logo: s.logo ?? null,
+    owner: toOwnerRef(s.owner),
+    productCount: typeof s.productCount === "number" ? s.productCount : Array.isArray(s.products) ? s.products.length : 0,
+  };
+}
+
+export function toStoreDetail(s: any) {
+  return {
+    ...toStoreSummary(s),
+    products: (s.products ?? []).map((p: any) => toProductSummary(p)),
+  };
+}
+
+export function toProductStoreRef(store: any) {
+  return {
+    id: store._id?.toString() ?? store.id ?? store.toString(),
+    name: store.name,
+  };
+}
+
+export function toProductSummary(p: any) {
+  return {
+    id: p._id?.toString() ?? p.id,
+    name: p.name,
+    price: p.price,
+    stock: p.stock,
+    images: p.images ?? [],
+    category: p.category,
+    sport: p.sport ?? undefined,
+    store: toProductStoreRef(p.store),
+  };
+}
+
+export function toProductDetail(p: any) {
+  return {
+    ...toProductSummary(p),
+    description: p.description ?? undefined,
+  };
+}
+
+export function toOrderItemJSON(item: any) {
+  return {
+    product: item.product ? item.product.toString() : null,
+    store: toProductStoreRef(item.store),
+    name: item.name,
+    price: item.price,
+    quantity: item.quantity,
+    image: item.image ?? null,
+  };
+}
+
+export function toOrderSummary(o: any) {
+  return {
+    id: o._id?.toString() ?? o.id,
+    items: (o.items ?? []).map((i: any) => toOrderItemJSON(i)),
+    totalAmount: o.totalAmount,
+    status: o.status,
+    shippingAddress: o.shippingAddress,
+    shippingProvince: o.shippingProvince ?? undefined,
+    createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : null,
+    payment: o.payment ? toPaymentSummary(o.payment) : null,
+  };
+}
+
 export function toMembershipSummary(m: any) {
   return {
     id: m._id?.toString() ?? m.id,

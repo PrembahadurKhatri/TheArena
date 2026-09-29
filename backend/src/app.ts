@@ -13,6 +13,7 @@ import myBookingsRoutes from "./routes/myBookingsRoutes";
 import paymentsRoutes from "./routes/paymentsRoutes";
 import membershipRoutes from "./routes/membershipRoutes";
 import rankingsRoutes from "./routes/rankingsRoutes";
+import shopRoutes from "./routes/shopRoutes";
 import { AppError } from "./utils/AppError";
 
 const app = express();
@@ -42,6 +43,7 @@ app.use("/api/my", myBookingsRoutes);
 app.use("/api/payments", paymentsRoutes);
 app.use("/api/membership", membershipRoutes);
 app.use("/api/rankings", rankingsRoutes);
+app.use("/api/shop", shopRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: `Not found: ${req.method} ${req.originalUrl}` });

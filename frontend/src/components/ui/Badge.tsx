@@ -16,6 +16,7 @@ export function StatusBadge({ status }: { status: string }) {
     completed: "bg-surface-2 text-ink-muted",
     pending_payment: "bg-premium-soft text-premium",
     confirmed: "bg-emerald-500/10 text-emerald-400",
+    paid: "bg-emerald-500/10 text-emerald-400",
     cancelled: "bg-red-500/10 text-red-400",
     pending: "bg-premium-soft text-premium",
     success: "bg-emerald-500/10 text-emerald-400",

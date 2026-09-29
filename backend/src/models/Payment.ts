@@ -1,6 +1,6 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type PaymentType = "ground_booking" | "membership";
+export type PaymentType = "ground_booking" | "membership" | "shop_order";
 export type PaymentStatus = "pending" | "success" | "failed";
 export type MembershipPlan = "monthly" | "yearly";
 
@@ -20,7 +20,7 @@ export interface IPayment extends Document {
 const paymentSchema = new Schema<IPayment>(
   {
     user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    type: { type: String, enum: ["ground_booking", "membership"], required: true },
+    type: { type: String, enum: ["ground_booking", "membership", "shop_order"], required: true },
     refId: { type: Schema.Types.ObjectId, default: null },
     plan: { type: String, enum: ["monthly", "yearly"], default: null },
     amount: { type: Number, required: true },

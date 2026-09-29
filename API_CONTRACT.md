@@ -115,21 +115,23 @@ if `req.user.isPremium` is false or `membershipExpiresAt` has passed.
 
 `status` values: `pending_payment | confirmed | cancelled`
 
-## Payments (shared TEST-mode flow — ground bookings AND membership)
+## Payments (shared TEST-mode flow — ground bookings, membership, AND shop orders)
 
 This is the "real, not fake" part — a real DB-backed flow with a clearly-labeled
 sandbox confirm step standing in for a live Khalti/eSewa call (no live keys yet).
 
-- `POST /api/payments/checkout` — auth. Body `{ type: "ground_booking" | "membership", refId, plan? }`
+- `POST /api/payments/checkout` — auth. Body `{ type: "ground_booking" | "membership" | "shop_order", refId, plan? }`
   - `type: "ground_booking"`: `refId` = booking id. Amount = `booking.totalAmount`.
   - `type: "membership"`: `refId` omitted, `plan` = `"monthly" | "yearly"`. Amount from
     `process.env.MEMBERSHIP_MONTHLY_PRICE` / `MEMBERSHIP_YEARLY_PRICE`.
+  - `type: "shop_order"`: `refId` = order id. Amount = `order.totalAmount`.
   - Creates a `Payment` doc, `status: "pending"`, `provider: "TEST"`. → `201 { payment: PaymentSummary }`
 - `POST /api/payments/:id/confirm` — auth, must own the payment. Simulates the gateway
   callback: sets `payment.status = "success"`, and:
   - if `type === "ground_booking"`: sets that `GroundBooking.status = "confirmed"`
   - if `type === "membership"`: creates/extends a `Membership` doc and sets
     `user.isPremium = true`, `user.membershipExpiresAt` (+30 days for monthly, +365 for yearly)
+  - if `type === "shop_order"`: sets that `Order.status = "paid"`
   → `200 { payment, redirect: "/dashboard" }`
 - `POST /api/payments/:id/fail` — auth. Sets `payment.status = "failed"` → `200 { payment }`
 
@@ -149,6 +151,78 @@ flow above with `type: "membership"`.
 
 Rankings are NOT manually editable — they're recomputed/incremented only as a side
 effect of `PATCH /api/tournaments/:id/matches/:matchId` marking a match complete.
+
+## Shop (multi-vendor marketplace — sports gear)
+
+A self-serve marketplace bolted onto The Arena: any logged-in user can open ONE
+store and list products (bats, balls, jerseys, boots, etc.); anyone (including
+guests) can browse and buy. Checkout reuses the shared TEST-mode payments flow
+above with `type: "shop_order"`. This is intentionally free/self-serve — no
+premium gate, no admin approval step (there's no admin panel yet — see the
+"Deferred to phase 2" list at the end of this doc).
+
+### Product categories (fixed, exactly these — used as plain strings)
+
+```
+Bats, Balls, Jerseys, Footwear, Protective Gear, Rackets, Accessories, Other
+```
+
+Defined in `frontend/src/data/shopCategories.ts` and mirrored in
+`backend/src/utils/shopCategories.ts`. A product's `sport` field is optional and,
+when set, must be one of the 10 sport slugs (same list as everywhere else) — some
+products are generic (e.g. a water bottle) and don't belong to one sport.
+
+### Stores
+
+- `GET /api/shop/stores` → `200 { stores: [StoreSummary] }` (public)
+- `GET /api/shop/stores/:id` → `200 { store: StoreDetail }` (public; `products` is that store's full active catalog)
+- `GET /api/shop/stores/mine` — auth → `200 { store: StoreDetail | null }` (null if the caller hasn't opened a store yet)
+- `POST /api/shop/stores` — auth, multipart if `logo` file included. Body `{ name, description? }`. 409 if the caller already owns a store (one store per user). → `201 { store }`
+- `PATCH /api/shop/stores/:id` — owner only. Same body shape as create → `200 { store }`
+
+`StoreSummary`: `{ id, name, description?, logo: string | null, owner: ApiUserRef, productCount }`
+`StoreDetail`: `StoreSummary & { products: [ProductSummary] }`
+
+### Products
+
+- `GET /api/shop/products?sport=<slug>&category=<name>&search=<q>&storeId=<id>` → `200 { products: [ProductSummary] }` (public — all filters optional and combinable)
+- `GET /api/shop/products/:id` → `200 { product: ProductDetail }` (public)
+- `POST /api/shop/products` — auth, caller must own a store, multipart if `images` files included. Body `{ name, description?, category, sport?, price, stock }` → `201 { product }`
+- `PATCH /api/shop/products/:id` — store owner only → `200 { product }`
+- `DELETE /api/shop/products/:id` — store owner only → `200 { message }`
+
+`ProductSummary`: `{ id, name, price, stock, images: string[], category, sport?: string, store: { id, name } }`
+`ProductDetail`: `ProductSummary & { description?: string }`
+
+### Cart
+
+There is **no server-side cart** — the cart lives client-side only
+(`frontend/src/context/CartContext.tsx`, persisted to `localStorage`, holds
+`{ productId, name, price, image, storeId, storeName, quantity }[]`). The server
+never trusts client-sent prices: checkout below re-derives everything from the
+live `Product` documents.
+
+### Orders / Checkout
+
+- `POST /api/shop/orders` — auth. Body `{ items: [{ productId, quantity }], shippingAddress, shippingProvince? }`.
+  Server re-reads each `Product` fresh, 400s if any item's `quantity` exceeds
+  current `stock`, computes `totalAmount` server-side (never trusts a client
+  price), **decrements stock immediately**, and snapshots each line item's
+  name/price/store at purchase time (so later store/price edits don't rewrite
+  order history). Creates `Order` with `status: "pending_payment"` →
+  `201 { order }`. Checkout continues through the shared
+  `POST /api/payments/checkout` (`type: "shop_order"`, `refId: order.id`) +
+  `POST /api/payments/:id/confirm` flow — confirming sets `order.status = "paid"`.
+- `GET /api/my/orders` — auth, buyer's own order history → `200 { orders: [OrderSummary] }`
+- `GET /api/shop/stores/:id/orders` — store owner only. Every order containing at
+  least one of their products, with `items` filtered down to just that store's
+  line items → `200 { orders: [OrderSummary] }` (used by the seller dashboard)
+
+`OrderItem`: `{ product: string | null, store: { id, name }, name, price, quantity, image: string | null }`
+(`product` is the id at time of purchase — may point at a since-deleted product, hence nullable in spirit even though it's stored as an id)
+`OrderSummary`: `{ id, items: OrderItem[], totalAmount, status, shippingAddress, shippingProvince?, createdAt, payment: PaymentSummary | null }`
+
+`status` values: `pending_payment | paid | cancelled`
 
 ## Error shape
 

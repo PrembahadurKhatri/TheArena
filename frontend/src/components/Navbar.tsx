@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, Crown, LogOut, Menu, User, X } from "lucide-react";
+import { ChevronDown, Crown, ExternalLink, LogOut, Menu, ShoppingBag, User, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const NAV_LINKS = [
@@ -67,6 +67,16 @@ export default function Navbar() {
               {link.label}
             </NavLink>
           ))}
+          <a
+            href="/shop"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium tracking-wide text-ink-muted transition-all duration-300 hover:bg-surface hover:text-ink"
+          >
+            <ShoppingBag className="h-3.5 w-3.5" />
+            Shop
+            <ExternalLink className="h-3 w-3 opacity-50" />
+          </a>
         </nav>
 
         <div className="hidden items-center gap-3 lg:flex">
@@ -170,6 +180,16 @@ export default function Navbar() {
                   {link.label}
                 </NavLink>
               ))}
+              <a
+                href="/shop"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-ink-muted hover:bg-surface hover:text-ink"
+              >
+                <ShoppingBag className="h-3.5 w-3.5" />
+                Shop
+                <ExternalLink className="h-3 w-3 opacity-50" />
+              </a>
               <div className="mt-2 flex flex-col gap-2 border-t border-border pt-3">
                 {user ? (
                   <>
