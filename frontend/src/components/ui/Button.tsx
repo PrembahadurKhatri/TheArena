@@ -1,10 +1,9 @@
 import { forwardRef } from "react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { motion } from "framer-motion";
 import { Loader2 } from "lucide-react";
 
-type Variant = "primary" | "secondary" | "ghost" | "premium" | "danger";
-type Size = "sm" | "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "premium" | "danger";
+export type ButtonSize = "sm" | "md" | "lg";
 
 type ConflictingHandlers =
   | "children"
@@ -16,44 +15,54 @@ type ConflictingHandlers =
   | "onAnimationIteration";
 
 interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, ConflictingHandlers> {
-  variant?: Variant;
-  size?: Size;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   loading?: boolean;
   icon?: ReactNode;
   children?: ReactNode;
   fullWidth?: boolean;
 }
 
-const variantClasses: Record<Variant, string> = {
-  primary: "bg-accent text-white hover:bg-accent/90 shadow-[0_0_0_1px_rgb(var(--c-accent)/0.4)]",
-  secondary: "glass text-ink hover:border-accent/50 hover:text-accent",
-  ghost: "text-ink-muted hover:text-ink hover:bg-surface",
-  premium: "bg-premium text-black hover:bg-premium/90 shadow-[0_0_0_1px_rgb(var(--c-premium)/0.5)]",
-  danger: "bg-red-500/10 text-red-400 border border-red-500/30 hover:bg-red-500/20",
+const variantClasses: Record<ButtonVariant, string> = {
+  primary: "bg-accent text-white hover:bg-accent/90 active:bg-accent/80",
+  secondary: "border border-border bg-surface text-ink hover:border-ink-faint/60 hover:bg-surface-2 active:bg-surface",
+  ghost: "text-ink-muted hover:bg-surface hover:text-ink active:bg-surface-2",
+  premium: "bg-premium text-black hover:bg-premium/90 active:bg-premium/80",
+  danger: "border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20 active:bg-danger/25",
 };
 
-const sizeClasses: Record<Size, string> = {
-  sm: "px-3.5 py-1.5 text-sm gap-1.5",
-  md: "px-5 py-2.5 text-sm gap-2",
-  lg: "px-7 py-3.5 text-base gap-2.5",
+const sizeClasses: Record<ButtonSize, string> = {
+  sm: "h-9 px-4 text-sm gap-1.5",
+  md: "h-11 px-5 text-sm gap-2",
+  lg: "h-12 px-7 text-base gap-2.5",
 };
+
+// Shared class builder so <Link>s can look exactly like buttons without
+// nesting a <button> inside an <a>.
+export function buttonClass({
+  variant = "primary",
+  size = "md",
+  fullWidth = false,
+  className = "",
+}: { variant?: ButtonVariant; size?: ButtonSize; fullWidth?: boolean; className?: string } = {}) {
+  return `inline-flex select-none items-center justify-center whitespace-nowrap rounded-full font-semibold transition-[background-color,border-color,color,transform] duration-150 active:translate-y-px focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-45 disabled:active:translate-y-0 ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? "w-full" : ""} ${className}`;
+}
 
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "primary", size = "md", loading, icon, children, className = "", fullWidth, disabled, ...rest },
   ref
 ) {
   return (
-    <motion.button
+    <button
       ref={ref}
-      whileHover={disabled || loading ? undefined : { y: -1 }}
-      whileTap={disabled || loading ? undefined : { scale: 0.97 }}
       disabled={disabled || loading}
-      className={`shine inline-flex items-center justify-center rounded-full font-semibold tracking-wide transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${variantClasses[variant]} ${sizeClasses[size]} ${fullWidth ? "w-full" : ""} ${className}`}
+      aria-busy={loading || undefined}
+      className={buttonClass({ variant, size, fullWidth, className })}
       {...rest}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : icon}
       {children}
-    </motion.button>
+    </button>
   );
 });
 

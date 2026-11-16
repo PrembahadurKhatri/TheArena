@@ -7,6 +7,7 @@ import { AppError } from "../utils/AppError";
 import { isValidSportSlug } from "../utils/sports";
 import { isValidProvince } from "../utils/provinces";
 import { recordMatchResult } from "./rankingsService";
+import { isObjectIdString, requireString, optionalString } from "../utils/validation";
 
 const TEAM_SUMMARY_POPULATE = { path: "owner", select: "name" };
 
@@ -47,20 +48,28 @@ export async function createTournament(
     location?: string;
   }
 ) {
-  const { name, sport, maxTeams, startDate, description, province, location } = input;
-  if (!name || !sport || !maxTeams || !startDate || !province) {
+  const { sport, maxTeams, startDate, province } = input;
+  if (!input.name || !sport || !maxTeams || !startDate || !province) {
     throw new AppError(400, "name, sport, maxTeams, startDate and province are required");
   }
+  const name = requireString(input.name, "name", { min: 3, max: 100 });
+  const description = optionalString(input.description, "description", 2000);
+  const location = optionalString(input.location, "location", 120);
+  const start = new Date(startDate);
+  if (Number.isNaN(start.getTime())) throw new AppError(400, "startDate is not a valid date");
   if (!isValidSportSlug(sport)) throw new AppError(400, `Invalid sport slug: ${sport}`);
   if (!isValidProvince(province)) throw new AppError(400, `Invalid province: ${province}`);
-  if (Number(maxTeams) < 2) throw new AppError(400, "maxTeams must be at least 2");
+  const teamCap = Number(maxTeams);
+  if (!Number.isInteger(teamCap) || teamCap < 2 || teamCap > 128) {
+    throw new AppError(400, "maxTeams must be a whole number between 2 and 128");
+  }
 
   const tournament = await Tournament.create({
     name,
     sport,
     organizer: organizer._id,
-    maxTeams: Number(maxTeams),
-    startDate: new Date(startDate),
+    maxTeams: teamCap,
+    startDate: start,
     description,
     province,
     location,
@@ -72,6 +81,7 @@ export async function createTournament(
 }
 
 export async function registerTeam(tournamentId: string, user: IUser, teamId: string) {
+  if (!isObjectIdString(teamId)) throw new AppError(400, "Invalid teamId");
   const tournament = await Tournament.findById(tournamentId);
   if (!tournament) throw new AppError(404, "Tournament not found");
 
@@ -94,8 +104,22 @@ export async function registerTeam(tournamentId: string, user: IUser, teamId: st
     throw new AppError(400, "Team is already registered for this tournament");
   }
 
-  tournament.teams.push(team._id);
-  await tournament.save();
+  // Atomic: only adds the team if the tournament is still upcoming, not yet
+  // full and the team isn't already in, so simultaneous registrations can't
+  // overfill it.
+  const updated = await Tournament.findOneAndUpdate(
+    {
+      _id: tournament._id,
+      status: "upcoming",
+      teams: { $ne: team._id },
+      $expr: { $lt: [{ $size: "$teams" }, "$maxTeams"] },
+    },
+    { $push: { teams: team._id } },
+    { new: true }
+  );
+  if (!updated) {
+    throw new AppError(409, "Could not register: the tournament just filled up, started, or already has this team");
+  }
 
   return Tournament.findById(tournament._id).populate(DETAIL_POPULATE);
 }
@@ -180,8 +204,14 @@ export async function startTournament(tournamentId: string, user: IUser) {
   }
 
   const shuffled = shuffle(tournament.teams);
+  // Atomic status flip: a double-clicked "Start" can't generate two brackets.
+  const flipped = await Tournament.findOneAndUpdate(
+    { _id: tournament._id, status: "upcoming" },
+    { $set: { status: "ongoing" } },
+    { new: true }
+  );
+  if (!flipped) throw new AppError(409, "Tournament has already started");
   tournament.status = "ongoing";
-  await tournament.save();
 
   await createRoundMatches(tournament._id, 1, shuffled);
   await maybeAdvanceRound(tournament, 1);
@@ -221,11 +251,24 @@ export async function completeMatch(
     throw new AppError(400, "winnerTeamId must be one of the two teams in this match");
   }
 
-  match.scoreA = Number(scoreA);
-  match.scoreB = Number(scoreB);
-  match.winner = new Types.ObjectId(winnerTeamId);
+  const a = Number(scoreA);
+  const b = Number(scoreB);
+  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || b < 0) {
+    throw new AppError(400, "Scores must be numbers of 0 or more");
+  }
+
+  // Atomic pending -> completed, so a double submit can't count the result
+  // in the rankings twice or advance the bracket twice.
+  const completed = await Match.findOneAndUpdate(
+    { _id: match._id, status: "pending" },
+    { $set: { scoreA: a, scoreB: b, winner: new Types.ObjectId(winnerTeamId), status: "completed" } },
+    { new: true }
+  );
+  if (!completed) throw new AppError(409, "Match is already completed");
+  match.scoreA = a;
+  match.scoreB = b;
+  match.winner = completed.winner;
   match.status = "completed";
-  await match.save();
 
   await recordMatchResult({
     sport: tournament.sport,

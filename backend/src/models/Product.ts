@@ -30,4 +30,7 @@ const productSchema = new Schema<IProduct>(
   { timestamps: true }
 );
 
+productSchema.index({ store: 1, createdAt: -1 });
+productSchema.index({ sport: 1, category: 1 });
+
 export const Product = model<IProduct>("Product", productSchema);

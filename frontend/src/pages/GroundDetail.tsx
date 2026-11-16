@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
-import { CheckCircle2, FlaskConical, LogIn, MapPin, ShieldCheck, Tent, XCircle } from "lucide-react";
-import api from "@/api/axios";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CheckCircle2, LogIn, MapPin, ShieldCheck, XCircle } from "lucide-react";
+import api, { assetUrl } from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
 import type { GroundDetail as GroundDetailType, PaymentSummary } from "@/types";
 import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
 import { Loading, ErrorState } from "@/components/ui/StateBlock";
 import { Input } from "@/components/ui/Field";
-import Button from "@/components/ui/Button";
+import Button, { buttonClass } from "@/components/ui/Button";
+import { FormError } from "@/components/page/AuthShell";
+import { SummaryRow, TestModeNote } from "@/components/page/Checkout";
 
 type Step = "form" | "checkout" | "success" | "failed";
 
@@ -29,9 +30,11 @@ export default function GroundDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [date, setDate] = useState("");
-  const [startTime, setStartTime] = useState("");
-  const [endTime, setEndTime] = useState("");
+  // A challenge page links here with ?date&start&end to book its slot.
+  const [searchParams] = useSearchParams();
+  const [date, setDate] = useState(searchParams.get("date") ?? "");
+  const [startTime, setStartTime] = useState(searchParams.get("start") ?? "");
+  const [endTime, setEndTime] = useState(searchParams.get("end") ?? "");
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState(false);
   const [step, setStep] = useState<Step>("form");
@@ -112,63 +115,64 @@ export default function GroundDetail() {
     }
   }
 
-  if (loading) return <Loading label="Loading ground..." />;
+  if (loading) return <Loading label="Loading ground…" />;
   if (error || !ground) return <ErrorState message={error || "Ground not found."} />;
 
   const sport = getSportBySlug(ground.sport);
+  const photo = ground.image ? assetUrl(ground.image) : sport?.image;
 
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x grid gap-10 lg:grid-cols-5">
-        <Reveal className="lg:col-span-3">
-          <div className="overflow-hidden rounded-3xl border border-border">
-            {ground.image ? (
-              <img src={ground.image} alt={ground.name} className="h-64 w-full object-cover md:h-80" />
-            ) : (
-              <div
-                className="flex h-64 w-full items-center justify-center text-5xl md:h-80"
-                style={{ background: `${sport?.color ?? "#3a82ff"}22` }}
-              >
-                {sport?.emoji ?? <Tent className="h-10 w-10 text-accent" />}
-              </div>
-            )}
-          </div>
-          <span className="eyebrow mt-6 inline-flex">{sport?.name ?? ground.sport}</span>
-          <h1 className="mt-3 font-display text-3xl font-bold text-ink md:text-4xl">{ground.name}</h1>
-          <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-muted">
+    <main className="flex-1">
+      <section className="relative isolate overflow-hidden border-b border-border bg-base-2">
+        {photo && (
+          <img
+            src={photo}
+            alt={ground.image ? ground.name : ""}
+            fetchPriority="high"
+            className={`absolute inset-0 -z-10 h-full w-full object-cover ${ground.image ? "" : "opacity-60"}`}
+          />
+        )}
+        <div className="photo-veil-bottom absolute inset-0 -z-10" />
+        <div className="container-x flex min-h-[380px] flex-col justify-end pb-10 pt-20 md:min-h-[480px]">
+          <Link to="/grounds" className="mb-auto inline-flex w-fit items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+            <ArrowLeft className="h-4 w-4" /> All grounds
+          </Link>
+          <p className="mt-10 text-sm font-medium text-ink-muted">{sport?.name ?? ground.sport}</p>
+          <h1 className="mt-2 max-w-3xl font-display text-5xl font-bold leading-[0.95] text-ink md:text-7xl">{ground.name}</h1>
+          <p className="mt-4 flex items-center gap-1.5 text-ink-muted">
             <MapPin className="h-4 w-4" /> {ground.location}
           </p>
-          {ground.description && (
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-ink-muted">{ground.description}</p>
-          )}
-          <p className="mt-6 font-display text-2xl font-semibold text-accent">
-            Rs {ground.pricePerHour}
-            <span className="text-sm font-normal text-ink-faint"> / hour</span>
+        </div>
+      </section>
+
+      <div className="container-x grid gap-12 py-12 md:py-16 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <div>
+          <p className="flex items-baseline gap-2">
+            <span className="num font-display text-6xl font-bold text-ink">Rs {ground.pricePerHour}</span>
+            <span className="text-ink-muted">per hour</span>
           </p>
-        </Reveal>
+          {user?.isPremium && <p className="mt-2 text-sm text-premium">Your Premium membership takes 10% off.</p>}
+          {ground.description && (
+            <p className="mt-8 max-w-[62ch] text-lg leading-relaxed text-ink-muted">{ground.description}</p>
+          )}
+        </div>
 
-        <Reveal delay={0.1} className="lg:col-span-2">
-          <div className="glass sticky top-24 rounded-3xl p-7">
-            <div className="mb-5 flex items-center gap-2">
-              <FlaskConical className="h-4 w-4 text-premium" />
-              <span className="text-xs font-semibold uppercase tracking-widest text-premium">
-                Test Mode — no real charge
-              </span>
-            </div>
-
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <div className="panel p-6 md:p-7">
             {!user ? (
-              <div className="text-center">
-                <LogIn className="mx-auto h-8 w-8 text-ink-faint" />
-                <p className="mt-3 text-sm text-ink-muted">Log in to book this ground.</p>
-                <Link to="/login" state={{ from: `/grounds/${id}` }}>
-                  <Button className="mt-4" fullWidth>
-                    Log in
-                  </Button>
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
+                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-2 text-ink-faint">
+                  <LogIn className="h-5 w-5" />
+                </span>
+                <p className="text-ink-muted">Log in to book this ground.</p>
+                <Link to="/login" state={{ from: `/grounds/${id}` }} className={buttonClass({ fullWidth: true, className: "mt-2" })}>
+                  Log in
                 </Link>
               </div>
             ) : step === "form" ? (
-              <form onSubmit={submitBooking} className="flex flex-col gap-4">
-                <h2 className="font-display text-xl font-semibold text-ink">Book this ground</h2>
+              <form onSubmit={submitBooking} className="flex flex-col gap-5">
+                <h2 className="font-display text-3xl font-bold text-ink">Book this ground</h2>
+                <TestModeNote />
                 <Input label="Date" type="date" required value={date} onChange={(e) => setDate(e.target.value)} />
                 <div className="grid grid-cols-2 gap-3">
                   <Input
@@ -187,62 +191,58 @@ export default function GroundDetail() {
                   />
                 </div>
 
-                <div className="rounded-xl border border-border bg-surface-2 p-4 text-sm">
-                  <div className="flex justify-between text-ink-muted">
-                    <span>{hours > 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : "Select a time range"}</span>
-                    {user.isPremium && hours > 0 && <span className="text-premium">-10% Premium</span>}
-                  </div>
-                  <div className="mt-1 flex justify-between font-display text-lg font-semibold text-ink">
-                    <span>Estimated total</span>
-                    <span>Rs {estimate.toFixed(0)}</span>
-                  </div>
+                <div className="flex flex-col gap-2 rounded-xl border border-border bg-base-2 p-4">
+                  <SummaryRow
+                    label={hours > 0 ? `${hours} hour${hours === 1 ? "" : "s"}` : "Select a time range"}
+                    value={user.isPremium && hours > 0 ? <span className="text-premium">Premium, 10% off</span> : ""}
+                  />
+                  <SummaryRow label="Estimated total" value={`Rs ${estimate.toFixed(0)}`} strong />
                 </div>
 
-                {formError && <p className="text-sm text-red-400">{formError}</p>}
+                {formError && <FormError>{formError}</FormError>}
                 <Button type="submit" loading={busy} fullWidth size="lg">
                   Continue to test payment
                 </Button>
               </form>
             ) : step === "checkout" && payment ? (
-              <div className="flex flex-col gap-4">
-                <h2 className="font-display text-xl font-semibold text-ink">Confirm test payment</h2>
-                <div className="rounded-xl border border-border bg-surface-2 p-4 text-sm">
-                  <div className="flex justify-between text-ink-muted">
-                    <span>Provider</span>
-                    <span>{payment.provider} (sandbox)</span>
-                  </div>
-                  <div className="mt-1 flex justify-between font-display text-lg font-semibold text-ink">
-                    <span>Amount</span>
-                    <span>Rs {payment.amount}</span>
-                  </div>
+              <div className="flex flex-col gap-5">
+                <h2 className="font-display text-3xl font-bold text-ink">Confirm test payment</h2>
+                <TestModeNote />
+                <div className="flex flex-col gap-2 rounded-xl border border-border bg-base-2 p-4">
+                  <SummaryRow label="Provider" value={`${payment.provider} (sandbox)`} />
+                  <SummaryRow label="Amount" value={`Rs ${payment.amount}`} strong />
                 </div>
-                <p className="text-xs text-ink-faint">
-                  This simulates a gateway callback — no real money moves. Click confirm to complete your booking.
+                <p className="text-sm text-ink-faint">
+                  This simulates a gateway callback, so no real money moves. Confirm to complete your booking.
                 </p>
-                {formError && <p className="text-sm text-red-400">{formError}</p>}
+                {formError && <FormError>{formError}</FormError>}
                 <Button onClick={confirmPayment} loading={busy} fullWidth size="lg" icon={<ShieldCheck className="h-4 w-4" />}>
                   Confirm test payment
                 </Button>
-                <button onClick={failPayment} disabled={busy} className="text-xs text-ink-faint hover:text-red-400">
+                <button
+                  onClick={failPayment}
+                  disabled={busy}
+                  className="whitespace-nowrap text-sm text-ink-faint transition-colors hover:text-danger active:text-danger/80 disabled:opacity-40"
+                >
                   Simulate a failed payment
                 </button>
               </div>
             ) : step === "success" ? (
               <div className="flex flex-col items-center gap-3 py-6 text-center">
-                <CheckCircle2 className="h-12 w-12 text-emerald-400" />
-                <h2 className="font-display text-xl font-semibold text-ink">Booking confirmed</h2>
-                <p className="text-sm text-ink-muted">Your ground is booked. See it anytime from your dashboard.</p>
-                <Link to="/dashboard">
-                  <Button className="mt-2">Go to dashboard</Button>
+                <CheckCircle2 className="h-12 w-12 text-success" />
+                <h2 className="font-display text-3xl font-bold text-ink">Booking confirmed</h2>
+                <p className="text-ink-muted">Your ground is booked. See it anytime from your dashboard.</p>
+                <Link to="/dashboard" className={buttonClass({ className: "mt-3" })}>
+                  Go to dashboard
                 </Link>
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 py-6 text-center">
-                <XCircle className="h-12 w-12 text-red-400" />
-                <h2 className="font-display text-xl font-semibold text-ink">Payment failed</h2>
-                <p className="text-sm text-ink-muted">That test payment was marked as failed. You can try again.</p>
+                <XCircle className="h-12 w-12 text-danger" />
+                <h2 className="font-display text-3xl font-bold text-ink">Payment failed</h2>
+                <p className="text-ink-muted">That test payment was marked as failed. You can try again.</p>
                 <Button
-                  className="mt-2"
+                  className="mt-3"
                   onClick={() => {
                     setStep("form");
                     setPayment(null);
@@ -253,7 +253,7 @@ export default function GroundDetail() {
               </div>
             )}
           </div>
-        </Reveal>
+        </aside>
       </div>
     </main>
   );

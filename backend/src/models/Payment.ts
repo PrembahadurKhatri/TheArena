@@ -30,4 +30,12 @@ const paymentSchema = new Schema<IPayment>(
   { timestamps: true }
 );
 
+// At most one *pending* payment per booking/order — the database-level
+// guard behind duplicate-checkout prevention.
+paymentSchema.index(
+  { type: 1, refId: 1 },
+  { unique: true, partialFilterExpression: { status: "pending", refId: { $type: "objectId" } } }
+);
+paymentSchema.index({ user: 1, createdAt: -1 });
+
 export const Payment = model<IPayment>("Payment", paymentSchema);

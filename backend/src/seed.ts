@@ -75,7 +75,14 @@ const GROUNDS: {
   { sport: "futsal", name: "Lalitpur Futsal Arena", location: "Pulchowk, Lalitpur", pricePerHour: 1600, amenities: ["Artificial Turf", "Parking"] },
 ];
 
-const SEED_STORE_PASSWORD = "SeedStore123!";
+// Demo seller accounts. In development the password defaults to a known
+// value; in production it must come from SEED_STORE_PASSWORD (never commit
+// it), because this repository is public.
+const isProduction = process.env.NODE_ENV === "production";
+const SEED_STORE_PASSWORD = process.env.SEED_STORE_PASSWORD || (isProduction ? "" : "SeedStore123!");
+// The demo shop is seeded by default in development, but only on request
+// (SEED_DEMO_SHOP=true) in production.
+const SEED_DEMO_SHOP = process.env.SEED_DEMO_SHOP ? process.env.SEED_DEMO_SHOP === "true" : !isProduction;
 
 const STORE_SEEDS: {
   ownerEmail: string;
@@ -124,6 +131,13 @@ const STORE_SEEDS: {
 ];
 
 async function seedShop() {
+  if (!SEED_DEMO_SHOP) {
+    console.log("[seed] skipping demo shop (set SEED_DEMO_SHOP=true to include it)");
+    return;
+  }
+  if (!SEED_STORE_PASSWORD || SEED_STORE_PASSWORD.length < 8) {
+    throw new Error("SEED_STORE_PASSWORD (8+ characters) is required to seed demo stores in production");
+  }
   console.log("[seed] upserting shop stores + products...");
   for (const s of STORE_SEEDS) {
     const passwordHash = await bcrypt.hash(SEED_STORE_PASSWORD, 10);
@@ -146,7 +160,9 @@ async function seedShop() {
       await Product.findOneAndUpdate(
         { store: store._id, name: p.name },
         {
-          $set: {
+          // Insert-only: re-running the seed must never reset a seller's
+          // live stock or prices.
+          $setOnInsert: {
             description: p.description,
             category: p.category,
             sport: p.sport,
@@ -158,7 +174,9 @@ async function seedShop() {
       );
     }
   }
-  console.log(`[seed] ${STORE_SEEDS.length} stores upserted (test password: "${SEED_STORE_PASSWORD}")`);
+  console.log(
+    `[seed] ${STORE_SEEDS.length} stores upserted` + (isProduction ? "" : ` (test password: "${SEED_STORE_PASSWORD}")`)
+  );
 }
 
 async function seed() {
@@ -179,7 +197,8 @@ async function seed() {
     await Ground.findOneAndUpdate(
       { name: g.name, location: g.location },
       {
-        $set: {
+        // Insert-only, so re-running the seed keeps any later edits.
+        $setOnInsert: {
           sport: g.sport,
           pricePerHour: g.pricePerHour,
           amenities: g.amenities,

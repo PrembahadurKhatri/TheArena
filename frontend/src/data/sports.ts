@@ -104,5 +104,8 @@ export function getSportBySlug(slug: string) {
 // consistent instead of each page re-building this list.
 export const SPORT_FILTER_OPTIONS = [
   { value: "", label: "All Sports" },
-  ...SPORTS.map((s) => ({ value: s.slug, label: s.name, icon: s.emoji, color: s.color })),
+  ...SPORTS.map((s) => ({ value: s.slug, label: s.name, image: s.image ?? undefined })),
 ];
+
+// Same list without the "All Sports" entry, for pickers that require a sport.
+export const SPORT_OPTIONS = SPORTS.map((s) => ({ value: s.slug, label: s.name, image: s.image ?? undefined }));

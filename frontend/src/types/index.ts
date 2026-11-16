@@ -195,6 +195,8 @@ export interface OrderSummary {
   status: OrderStatus;
   shippingAddress: string;
   shippingProvince?: string;
+  contactName?: string;
+  contactPhone?: string;
   createdAt: string;
   payment: PaymentSummary | null;
 }
@@ -202,4 +204,42 @@ export interface OrderSummary {
 export function apiError(err: unknown, fallback = "Something went wrong. Please try again."): string {
   const e = err as { response?: { data?: { message?: string } } };
   return e?.response?.data?.message || fallback;
+}
+
+export type ChallengeMode = "team" | "player";
+export type ChallengeStatus = "open" | "pending" | "accepted" | "declined" | "cancelled";
+
+export interface ChallengeSide {
+  kind: "team" | "player";
+  id: string;
+  name: string;
+  image: string | null;
+  /** For a team: its owner's user id. For a player: the player's own id. */
+  ownerId: string | null;
+  memberCount?: number;
+}
+
+export interface Challenge {
+  id: string;
+  sport: string;
+  mode: ChallengeMode;
+  status: ChallengeStatus;
+  date: string;
+  startTime: string;
+  endTime: string;
+  challenger: ChallengeSide | null;
+  challengerUserId: string | null;
+  opponent: ChallengeSide | null;
+  acceptedBy: ChallengeSide | null;
+  acceptedByUserId: string | null;
+  ground: GroundSummary | null;
+  province?: string;
+  venueNote?: string;
+  message?: string;
+  createdAt: string | null;
+}
+
+export interface GroundAvailability {
+  date: string;
+  taken: { startTime: string; endTime: string; kind: "booking" | "match" }[];
 }

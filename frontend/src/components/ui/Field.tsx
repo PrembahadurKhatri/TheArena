@@ -1,8 +1,8 @@
 import { forwardRef } from "react";
 import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
 
-const baseClasses =
-  "w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm text-ink placeholder:text-ink-faint outline-none transition-colors focus:border-accent focus:ring-2 focus:ring-accent/20";
+export const fieldClasses =
+  "w-full rounded-xl border border-border bg-base-2 px-4 py-3 text-[15px] text-ink placeholder:text-ink-faint outline-none transition-[border-color,box-shadow,background-color] duration-150 hover:border-ink-faint/50 focus:border-accent focus:bg-base focus:ring-4 focus:ring-accent/15 disabled:cursor-not-allowed disabled:opacity-50";
 
 interface WrapperProps {
   label?: string;
@@ -15,7 +15,7 @@ interface WrapperProps {
 
 export function FieldWrap({ label, hint, error, required, children, htmlFor }: WrapperProps) {
   return (
-    <div className="flex flex-col gap-1.5">
+    <div className="flex flex-col gap-2">
       {label && (
         <label htmlFor={htmlFor} className="text-sm font-medium text-ink-muted">
           {label} {required && <span className="text-accent">*</span>}
@@ -23,7 +23,7 @@ export function FieldWrap({ label, hint, error, required, children, htmlFor }: W
       )}
       {children}
       {hint && !error && <span className="text-xs text-ink-faint">{hint}</span>}
-      {error && <span className="text-xs text-red-400">{error}</span>}
+      {error && <span className="text-xs text-danger">{error}</span>}
     </div>
   );
 }
@@ -44,7 +44,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
         ref={ref}
         id={id}
         required={required}
-        className={`${baseClasses} ${error ? "border-red-500/50" : ""} ${className}`}
+        className={`${fieldClasses} ${error ? "border-danger/50" : ""} ${className}`}
         {...rest}
       />
     </FieldWrap>
@@ -67,7 +67,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         ref={ref}
         id={id}
         required={required}
-        className={`${baseClasses} min-h-[110px] resize-y ${error ? "border-red-500/50" : ""} ${className}`}
+        className={`${fieldClasses} min-h-[120px] resize-y ${error ? "border-danger/50" : ""} ${className}`}
         {...rest}
       />
     </FieldWrap>
@@ -90,7 +90,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
         ref={ref}
         id={id}
         required={required}
-        className={`${baseClasses} appearance-none ${error ? "border-red-500/50" : ""} ${className}`}
+        className={`${fieldClasses} appearance-none ${error ? "border-danger/50" : ""} ${className}`}
         {...rest}
       >
         {children}

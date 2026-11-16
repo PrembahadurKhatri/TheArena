@@ -1,0 +1,43 @@
+# Render Blueprint for The Arena backend (optional — you can also create the
+# service by hand with the same values). Secrets use `sync: false`, so Render
+# asks for them in the dashboard; they are never stored in this file.
+services:
+  - type: web
+    name: the-arena-api
+    runtime: node
+    # Closest Render region to Nepal.
+    region: singapore
+    plan: free
+    rootDir: backend
+    # --include=dev: TypeScript and @types are devDependencies and are needed
+    # to compile, even when NODE_ENV=production.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: MONGO_URI
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: CLIENT_URL
+        sync: false
+      - key: PAYMENT_MODE
+        sync: false
+      - key: MEMBERSHIP_MONTHLY_PRICE
+        value: "299"
+      - key: MEMBERSHIP_YEARLY_PRICE
+        value: "2999"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false

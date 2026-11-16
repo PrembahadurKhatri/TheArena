@@ -1,83 +1,104 @@
 import { Link } from "react-router-dom";
-import { ImageOff, ShoppingCart, Store as StoreIcon } from "lucide-react";
+import { ImageOff, ShoppingBag, Store as StoreIcon } from "lucide-react";
 import type { ProductSummary } from "@/types";
 import { useCart } from "@/context/CartContext";
-import { useSpotlight } from "@/hooks/useSpotlight";
 import { getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
-import Button from "@/components/ui/Button";
+import { assetUrl } from "@/api/axios";
+import QuantityStepper from "./QuantityStepper";
 
-// Shared product card used by ShopHome, StoreDetail, and anywhere else a
-// product grid appears — mirrors the GroundCard pattern (spotlight glass
-// card, Reveal entrance) but adds an inline "Add to cart" action that works
-// right from the grid without leaving the page.
-export default function ProductCard({ product, index = 0 }: { product: ProductSummary; index?: number }) {
-  const spot = useSpotlight<HTMLDivElement>();
-  const { addToCart, items } = useCart();
+// Shared product card for ShopHome, StoreDetail and any other product grid.
+// "Add to cart" turns into a − n + stepper once the product is in the cart.
+export default function ProductCard({ product }: { product: ProductSummary; index?: number }) {
+  const { addToCart, updateQuantity, removeFromCart, quantityOf, openDrawer } = useCart();
   const sport = product.sport ? getSportBySlug(product.sport) : undefined;
 
-  const inCartQty = items.find((i) => i.productId === product.id)?.quantity ?? 0;
+  const inCartQty = quantityOf(product.id);
   const outOfStock = product.stock <= 0;
-  const atCap = !outOfStock && inCartQty >= product.stock;
+  const lowStock = !outOfStock && product.stock <= 5;
 
   return (
-    <Reveal delay={(index % 8) * 0.05}>
-      <div
-        ref={spot.ref}
-        onMouseMove={spot.onMouseMove}
-        className="spotlight glass group flex h-full flex-col overflow-hidden rounded-2xl transition-transform hover:-translate-y-1 hover:border-accent/40"
-      >
-        <Link to={`/shop/products/${product.id}`} className="relative block h-36 w-full overflow-hidden bg-surface-2">
-          {product.images?.[0] ? (
-            <img
-              src={product.images[0]}
-              alt={product.name}
-              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-            />
-          ) : (
-            <div
-              className="flex h-full w-full items-center justify-center text-3xl"
-              style={{ background: `${sport?.color ?? "#3a82ff"}22` }}
-            >
-              {sport?.emoji ?? <ImageOff className="h-7 w-7 text-ink-faint" />}
-            </div>
-          )}
-          {outOfStock && (
-            <span className="absolute right-3 top-3 rounded-full bg-red-500/90 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-white">
-              Out of stock
-            </span>
-          )}
+    <article className="panel card-lift group flex h-full flex-col overflow-hidden">
+      <Link to={`/shop/products/${product.id}`} className="relative block aspect-square w-full overflow-hidden bg-surface-2">
+        {product.images?.[0] ? (
+          <img
+            src={assetUrl(product.images[0])}
+            alt={product.name}
+            loading="lazy"
+            className={`h-full w-full object-cover ${outOfStock ? "opacity-50 grayscale" : ""}`}
+          />
+        ) : (
+          <span className="flex h-full w-full flex-col items-center justify-center gap-2 text-ink-faint">
+            <ImageOff className="h-7 w-7" />
+            <span className="text-sm">No photo yet</span>
+          </span>
+        )}
+        {outOfStock ? (
+          <span className="absolute left-3 top-3 rounded-full bg-danger px-2.5 py-1 text-xs font-semibold text-base">
+            Sold out
+          </span>
+        ) : lowStock ? (
+          <span className="absolute left-3 top-3 rounded-full bg-premium px-2.5 py-1 text-xs font-semibold text-black">
+            Only {product.stock} left
+          </span>
+        ) : null}
+      </Link>
+
+      <div className="flex flex-1 flex-col gap-1 p-4">
+        <span className="text-xs text-ink-faint">
+          {product.category}
+          {sport ? `, ${sport.name}` : ""}
+        </span>
+        <Link
+          to={`/shop/products/${product.id}`}
+          className="line-clamp-2 font-display text-xl font-bold leading-tight text-ink hover:text-accent"
+        >
+          {product.name}
+        </Link>
+        <Link
+          to={`/shop/stores/${product.store.id}`}
+          className="mt-0.5 flex w-fit items-center gap-1.5 text-sm text-ink-muted hover:text-accent"
+        >
+          <StoreIcon className="h-3.5 w-3.5" /> {product.store.name}
         </Link>
 
-        <div className="flex flex-1 flex-col gap-1.5 p-5">
-          <span className="text-xs font-medium uppercase tracking-widest text-ink-faint">{product.category}</span>
-          <Link
-            to={`/shop/products/${product.id}`}
-            className="line-clamp-1 font-display text-lg font-semibold text-ink hover:text-accent"
-          >
-            {product.name}
-          </Link>
-          <Link
-            to={`/shop/stores/${product.store.id}`}
-            className="flex items-center gap-1.5 text-xs text-ink-muted hover:text-accent"
-          >
-            <StoreIcon className="h-3 w-3" /> {product.store.name}
-          </Link>
+        <p className="num mt-auto pt-3 font-display text-2xl font-bold text-ink">Rs {product.price}</p>
 
-          <div className="mt-auto flex items-center justify-between gap-2 pt-3">
-            <span className="font-display text-lg font-semibold text-accent">Rs {product.price}</span>
-            <Button
-              size="sm"
-              variant="secondary"
-              icon={<ShoppingCart className="h-3.5 w-3.5" />}
-              disabled={outOfStock || atCap}
-              onClick={() => addToCart(product, 1)}
+        <div className="mt-3">
+          {outOfStock ? (
+            <span className="flex h-10 w-full items-center justify-center rounded-full bg-surface-2 text-sm font-semibold text-ink-faint">
+              Out of stock
+            </span>
+          ) : inCartQty > 0 ? (
+            <div className="flex items-center justify-between gap-2">
+              <QuantityStepper
+                value={inCartQty}
+                max={product.stock}
+                label={product.name}
+                onChange={(q) => updateQuantity(product.id, q)}
+                onRemove={() => removeFromCart(product.id)}
+              />
+              <button
+                type="button"
+                onClick={openDrawer}
+                className="whitespace-nowrap text-sm font-semibold text-accent hover:underline"
+              >
+                In cart
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                addToCart(product, 1);
+                openDrawer();
+              }}
+              className="inline-flex h-10 w-full items-center justify-center gap-2 whitespace-nowrap rounded-full bg-accent text-sm font-semibold text-white transition-colors hover:bg-accent/90 active:bg-accent/80"
             >
-              {outOfStock ? "Out of stock" : atCap ? "Max in cart" : "Add"}
-            </Button>
-          </div>
+              <ShoppingBag className="h-4 w-4" /> Add to cart
+            </button>
+          )}
         </div>
       </div>
-    </Reveal>
+    </article>
   );
 }

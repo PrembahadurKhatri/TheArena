@@ -3,6 +3,8 @@ import { Team } from "../models/Team";
 import { IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
 import { isValidSportSlug } from "../utils/sports";
+import { Tournament } from "../models/Tournament";
+import { searchRegex, requireString } from "../utils/validation";
 
 const TEAM_SUMMARY_POPULATE = { path: "owner", select: "name" };
 const TEAM_DETAIL_POPULATE = [
@@ -14,7 +16,8 @@ const TEAM_DETAIL_POPULATE = [
 export async function listTeams(filters: { sport?: string; search?: string }) {
   const query: any = {};
   if (filters.sport) query.sport = filters.sport;
-  if (filters.search) query.name = { $regex: filters.search, $options: "i" };
+  const nameRegex = searchRegex(filters.search);
+  if (nameRegex) query.name = nameRegex;
 
   return Team.find(query).populate(TEAM_SUMMARY_POPULATE).sort({ createdAt: -1 });
 }
@@ -35,8 +38,9 @@ export async function createTeam(
   owner: IUser,
   input: { name: string; sport: string; logo?: string | null }
 ) {
-  const { name, sport, logo } = input;
-  if (!name || !sport) throw new AppError(400, "name and sport are required");
+  const { sport, logo } = input;
+  if (!input.name || !sport) throw new AppError(400, "name and sport are required");
+  const name = requireString(input.name, "name", { min: 2, max: 60 });
   if (!isValidSportSlug(sport)) throw new AppError(400, `Invalid sport slug: ${sport}`);
 
   if (!owner.isPremium) {
@@ -73,7 +77,7 @@ export async function updateTeam(
   updates: { name?: string; sport?: string; logo?: string }
 ) {
   const team = await getOwnedTeamOrThrow(teamId, user._id);
-  if (updates.name !== undefined) team.name = updates.name;
+  if (updates.name !== undefined) team.name = requireString(updates.name, "name", { min: 2, max: 60 });
   if (updates.sport !== undefined) {
     if (!isValidSportSlug(updates.sport)) throw new AppError(400, `Invalid sport slug: ${updates.sport}`);
     team.sport = updates.sport;
@@ -85,6 +89,12 @@ export async function updateTeam(
 
 export async function deleteTeam(teamId: string, user: IUser) {
   const team = await getOwnedTeamOrThrow(teamId, user._id);
+  // Deleting a team mid-tournament would leave the bracket pointing at a
+  // team that no longer exists.
+  const active = await Tournament.exists({ teams: team._id, status: { $in: ["upcoming", "ongoing"] } });
+  if (active) {
+    throw new AppError(400, "This team is registered in an upcoming or ongoing tournament and can't be deleted");
+  }
   await team.deleteOne();
   return { message: "Team deleted successfully" };
 }

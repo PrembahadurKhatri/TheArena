@@ -38,4 +38,7 @@ const tournamentSchema = new Schema<ITournament>(
   { timestamps: true }
 );
 
+tournamentSchema.index({ status: 1, startDate: 1 });
+tournamentSchema.index({ teams: 1 });
+
 export const Tournament = model<ITournament>("Tournament", tournamentSchema);

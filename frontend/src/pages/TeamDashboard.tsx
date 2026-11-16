@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Check, Plus, Shield, UserMinus, Users, X } from "lucide-react";
-import api from "@/api/axios";
+import { ArrowUpRight, Check, Plus, UserMinus, X } from "lucide-react";
+import api, { assetUrl } from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
 import type { TeamDetail } from "@/types";
 import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
+import { buttonClass } from "@/components/ui/Button";
+import SportMark, { Initials } from "@/components/ui/SportMark";
+
+const iconBtn =
+  "flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors disabled:opacity-40";
 
 export default function TeamDashboard() {
   const { user } = useAuth();
@@ -62,37 +66,35 @@ export default function TeamDashboard() {
     }
   }
 
+  const pendingTotal = teams.reduce((n, t) => n + (t.pendingRequests?.length ?? 0), 0);
+
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x">
-        <div className="flex flex-wrap items-end justify-between gap-6">
+    <main className="flex-1">
+      <div className="container-x py-14 md:py-20">
+        <div className="flex flex-wrap items-end justify-between gap-6 border-b border-border pb-8">
           <div>
-            <Reveal>
-              <span className="eyebrow">Team dashboard</span>
-            </Reveal>
-            <Reveal delay={0.06}>
-              <h1 className="mt-4 font-display text-4xl font-bold text-ink">Manage your teams</h1>
-            </Reveal>
+            <h1 className="font-display text-5xl font-bold leading-[0.95] text-ink md:text-6xl">Manage your teams</h1>
+            {!loading && teams.length > 0 && (
+              <p className="mt-3 text-ink-muted">
+                <span className="num">{teams.length}</span> {teams.length === 1 ? "team" : "teams"},{" "}
+                <span className="num">{pendingTotal}</span> pending {pendingTotal === 1 ? "request" : "requests"}
+              </p>
+            )}
           </div>
-          <Reveal delay={0.1}>
-            <Link
-              to="/teams/create"
-              className="shine inline-flex items-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent/90"
-            >
-              <Plus className="h-4 w-4" /> New team
-            </Link>
-          </Reveal>
+          <Link to="/teams/create" className={buttonClass({ size: "lg" })}>
+            <Plus className="h-4 w-4" /> New team
+          </Link>
         </div>
 
         <div className="mt-10">
-          {loading && <Loading label="Loading your teams..." />}
+          {loading && <Loading label="Loading your teams…" />}
           {!loading && error && <ErrorState message={error} onRetry={load} />}
           {!loading && !error && teams.length === 0 && (
             <EmptyState
-              title="You don't own a team yet"
+              title="You don’t own a team yet"
               message="Create a team to start managing your roster and join requests."
               action={
-                <Link to="/teams/create" className="mt-2 text-sm font-semibold text-accent hover:underline">
+                <Link to="/teams/create" className={buttonClass({ variant: "secondary", size: "sm", className: "mt-2" })}>
                   Create a team
                 </Link>
               }
@@ -100,97 +102,100 @@ export default function TeamDashboard() {
           )}
 
           <div className="flex flex-col gap-8">
-            {teams.map((team, i) => {
+            {teams.map((team) => {
               const sport = getSportBySlug(team.sport);
               return (
-                <Reveal key={team.id} delay={i * 0.08}>
-                  <div className="glass rounded-3xl p-7">
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="flex items-center gap-4">
-                        {team.logo ? (
-                          <img src={team.logo} alt={team.name} className="h-14 w-14 rounded-xl object-cover" />
-                        ) : (
-                          <div
-                            className="flex h-14 w-14 items-center justify-center rounded-xl text-2xl"
-                            style={{ background: `${sport?.color ?? "#3a82ff"}22` }}
-                          >
-                            {sport?.emoji ?? <Shield className="h-6 w-6 text-accent" />}
-                          </div>
-                        )}
-                        <div>
-                          <Link to={`/teams/${team.id}`} className="font-display text-xl font-semibold text-ink hover:text-accent">
-                            {team.name}
-                          </Link>
-                          <p className="flex items-center gap-1.5 text-xs text-ink-faint">
-                            <Users className="h-3 w-3" /> {team.memberCount} members · {sport?.name ?? team.sport}
-                          </p>
-                        </div>
+                <section key={team.id} className="panel overflow-hidden">
+                  <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-base-2 px-6 py-5">
+                    <div className="flex min-w-0 items-center gap-4">
+                      {team.logo ? (
+                        <img src={assetUrl(team.logo)} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                      ) : (
+                        <SportMark slug={team.sport} size="lg" className="!h-14 !w-14" />
+                      )}
+                      <div className="min-w-0">
+                        <h2 className="truncate font-display text-3xl font-bold text-ink">{team.name}</h2>
+                        <p className="text-sm text-ink-muted">
+                          {sport?.name ?? team.sport}, <span className="num">{team.memberCount}</span> members
+                        </p>
                       </div>
                     </div>
+                    <Link to={`/teams/${team.id}`} className={buttonClass({ variant: "secondary", size: "sm" })}>
+                      Team page <ArrowUpRight className="h-3.5 w-3.5" />
+                    </Link>
+                  </header>
 
-                    <div className="mt-6 grid gap-6 md:grid-cols-2">
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-faint">Roster</h3>
-                        <div className="mt-3 flex flex-col gap-2">
-                          {team.members?.length ? (
-                            team.members.map((m) => (
-                              <div key={m.id} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
-                                <span className="text-sm text-ink">{m.name}</span>
-                                {m.id !== user?.id && (
-                                  <button
-                                    onClick={() => removeMember(team.id, m.id)}
-                                    disabled={busy === `${team.id}-${m.id}`}
-                                    className="rounded-full p-1 text-ink-faint hover:bg-red-500/10 hover:text-red-400"
-                                    aria-label={`Remove ${m.name}`}
-                                  >
-                                    <UserMinus className="h-3.5 w-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-ink-faint">No members yet.</p>
-                          )}
-                        </div>
-                      </div>
+                  <div className="grid md:grid-cols-2 md:divide-x md:divide-border">
+                    <div className="p-6">
+                      <h3 className="flex items-baseline justify-between text-sm font-semibold text-ink-muted">
+                        Roster <span className="num font-normal text-ink-faint">{team.members?.length ?? 0}</span>
+                      </h3>
+                      <ul className="mt-4 flex flex-col divide-y divide-border">
+                        {team.members?.length ? (
+                          team.members.map((m) => (
+                            <li key={m.id} className="flex items-center justify-between gap-3 py-2.5">
+                              <span className="flex min-w-0 items-center gap-3">
+                                <Initials name={m.name} className="h-8 w-8 rounded-full text-xs" />
+                                <span className="truncate text-sm text-ink">{m.name}</span>
+                              </span>
+                              {m.id !== user?.id && (
+                                <button
+                                  onClick={() => removeMember(team.id, m.id)}
+                                  disabled={busy === `${team.id}-${m.id}`}
+                                  className={`${iconBtn} text-ink-faint hover:bg-danger/10 hover:text-danger active:bg-danger/20`}
+                                  aria-label={`Remove ${m.name}`}
+                                >
+                                  <UserMinus className="h-4 w-4" />
+                                </button>
+                              )}
+                            </li>
+                          ))
+                        ) : (
+                          <li className="py-2 text-sm text-ink-faint">No members yet.</li>
+                        )}
+                      </ul>
+                    </div>
 
-                      <div>
-                        <h3 className="text-xs font-semibold uppercase tracking-widest text-ink-faint">
-                          Pending requests
-                        </h3>
-                        <div className="mt-3 flex flex-col gap-2">
-                          {team.pendingRequests?.length ? (
-                            team.pendingRequests.map((r) => (
-                              <div key={r.id} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
-                                <span className="text-sm text-ink">{r.name}</span>
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={() => respond(team.id, r.id, "accept")}
-                                    disabled={busy === `${team.id}-${r.id}`}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                                    aria-label="Accept"
-                                  >
-                                    <Check className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    onClick={() => respond(team.id, r.id, "reject")}
-                                    disabled={busy === `${team.id}-${r.id}`}
-                                    className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                                    aria-label="Reject"
-                                  >
-                                    <X className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-ink-faint">No pending requests.</p>
-                          )}
-                        </div>
-                      </div>
+                    <div className="border-t border-border p-6 md:border-t-0">
+                      <h3 className="flex items-baseline justify-between text-sm font-semibold text-ink-muted">
+                        Pending requests{" "}
+                        <span className="num font-normal text-ink-faint">{team.pendingRequests?.length ?? 0}</span>
+                      </h3>
+                      <ul className="mt-4 flex flex-col divide-y divide-border">
+                        {team.pendingRequests?.length ? (
+                          team.pendingRequests.map((r) => (
+                            <li key={r.id} className="flex items-center justify-between gap-3 py-2.5">
+                              <span className="flex min-w-0 items-center gap-3">
+                                <Initials name={r.name} className="h-8 w-8 rounded-full text-xs" />
+                                <span className="truncate text-sm text-ink">{r.name}</span>
+                              </span>
+                              <span className="flex gap-1.5">
+                                <button
+                                  onClick={() => respond(team.id, r.id, "accept")}
+                                  disabled={busy === `${team.id}-${r.id}`}
+                                  className={`${iconBtn} bg-success/10 text-success hover:bg-success/20 active:bg-success/25`}
+                                  aria-label="Accept"
+                                >
+                                  <Check className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => respond(team.id, r.id, "reject")}
+                                  disabled={busy === `${team.id}-${r.id}`}
+                                  className={`${iconBtn} bg-danger/10 text-danger hover:bg-danger/20 active:bg-danger/25`}
+                                  aria-label="Reject"
+                                >
+                                  <X className="h-4 w-4" />
+                                </button>
+                              </span>
+                            </li>
+                          ))
+                        ) : (
+                          <li className="py-2 text-sm text-ink-faint">No pending requests.</li>
+                        )}
+                      </ul>
                     </div>
                   </div>
-                </Reveal>
+                </section>
               );
             })}
           </div>

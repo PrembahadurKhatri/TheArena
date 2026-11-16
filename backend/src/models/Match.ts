@@ -30,4 +30,6 @@ const matchSchema = new Schema<IMatch>(
   { timestamps: true }
 );
 
+matchSchema.index({ tournament: 1, round: 1, createdAt: 1 });
+
 export const Match = model<IMatch>("Match", matchSchema);

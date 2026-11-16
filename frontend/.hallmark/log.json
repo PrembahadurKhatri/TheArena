@@ -1,0 +1,16 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "site",
+  "shape": "app screens under a photo masthead",
+  "theme": "brand",
+  "hero": "masthead photograph",
+  "nav": "kept, Membership removed",
+  "footer": "kept",
+  "imagery": "the project sport photographs",
+  "signature": "sport photograph mastheads, fixture list, podium",
+  "prompt": "redesign every page except the homepage, premium; remove Membership from the navbar",
+  "date": "2026-11-16"
+ }
+]

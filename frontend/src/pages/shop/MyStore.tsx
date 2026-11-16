@@ -10,22 +10,20 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import api from "@/api/axios";
+import api, { assetUrl } from "@/api/axios";
 import type { OrderSummary, ProductDetail, ProductSummary, StoreDetail } from "@/types";
 import { apiError } from "@/types";
 import { SHOP_CATEGORY_OPTIONS } from "@/data/shopCategories";
-import { SPORTS, getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
+import { SPORT_OPTIONS, getSportBySlug } from "@/data/sports";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
 import { Input, Textarea } from "@/components/ui/Field";
 import CustomSelect from "@/components/ui/CustomSelect";
 import Button from "@/components/ui/Button";
+import { FormError } from "@/components/page/AuthShell";
+import SportMark from "@/components/ui/SportMark";
 import { StatusBadge } from "@/components/ui/Badge";
 
-const PRODUCT_SPORT_OPTIONS = [
-  { value: "", label: "No specific sport" },
-  ...SPORTS.map((s) => ({ value: s.slug, label: s.name, icon: s.emoji, color: s.color })),
-];
+const PRODUCT_SPORT_OPTIONS = [{ value: "", label: "No specific sport" }, ...SPORT_OPTIONS];
 
 interface ProductFormState {
   name: string;
@@ -68,14 +66,12 @@ export default function MyStore() {
   }, [load]);
 
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x">
-        <Reveal>
-          <span className="eyebrow">Seller dashboard</span>
-        </Reveal>
-        <Reveal delay={0.06}>
-          <h1 className="mt-4 font-display text-4xl font-bold text-ink">My store</h1>
-        </Reveal>
+    <main className="flex-1">
+      <div className="container-x py-14 md:py-20">
+        <div className="border-b border-border pb-8">
+          <p className="text-sm text-ink-faint">Seller dashboard</p>
+          <h1 className="mt-2 font-display text-5xl font-bold leading-none text-ink md:text-6xl">My store</h1>
+        </div>
 
         <div className="mt-10">
           {loading && <Loading label="Loading your store..." />}
@@ -124,15 +120,15 @@ function CreateStoreForm({ onCreated }: { onCreated: (store: StoreDetail) => voi
   }
 
   return (
-    <Reveal className="max-w-xl">
-      <p className="mb-6 text-sm text-ink-muted">
-        Open your own store on The Arena and start listing gear — free, no approval needed. One store per account.
+    <div className="max-w-2xl">
+      <p className="mb-8 text-lg text-ink-muted">
+        Open your own store on The Arena and start listing gear. It’s free, with no approval needed. One store per account.
       </p>
-      <form onSubmit={onSubmit} className="glass flex flex-col gap-5 rounded-3xl p-8">
+      <form onSubmit={onSubmit} className="panel flex flex-col gap-5 p-6 md:p-8">
         <div className="flex items-center gap-4">
           <label
             htmlFor="storeLogo"
-            className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-surface-2 text-ink-faint hover:border-accent/50"
+            className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-base-2 text-ink-faint transition-colors hover:border-accent/50"
           >
             {preview ? (
               <img src={preview} alt="Logo preview" className="h-full w-full object-cover" />
@@ -147,7 +143,7 @@ function CreateStoreForm({ onCreated }: { onCreated: (store: StoreDetail) => voi
               id="storeLogo"
               type="file"
               accept="image/*"
-              className="hidden"
+              className="sr-only"
               onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
             />
           </div>
@@ -167,12 +163,12 @@ function CreateStoreForm({ onCreated }: { onCreated: (store: StoreDetail) => voi
           placeholder="What does your store sell?"
         />
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <FormError>{error}</FormError>}
         <Button type="submit" loading={loading} size="lg" icon={<StoreIcon className="h-4 w-4" />}>
           Open my store
         </Button>
       </form>
-    </Reveal>
+    </div>
   );
 }
 
@@ -239,7 +235,7 @@ function StoreManager({
   return (
     <div className="flex flex-col gap-10">
       {/* STORE HEADER */}
-      <Reveal>
+      <section>
         {editingStore ? (
           <EditStoreForm
             store={store}
@@ -250,30 +246,32 @@ function StoreManager({
             onCancel={() => setEditingStore(false)}
           />
         ) : (
-          <div className="glass flex flex-col gap-6 rounded-3xl p-8 sm:flex-row sm:items-center">
+          <div className="panel flex flex-col gap-6 p-6 sm:flex-row sm:items-center md:p-8">
             {store.logo ? (
-              <img src={store.logo} alt={store.name} className="h-20 w-20 rounded-2xl object-cover" />
+              <img src={assetUrl(store.logo)} alt={store.name} className="h-20 w-20 rounded-2xl object-cover" />
             ) : (
               <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-accent-soft text-accent">
                 <StoreIcon className="h-9 w-9" />
               </div>
             )}
             <div className="flex-1">
-              <h2 className="font-display text-2xl font-bold text-ink">{store.name}</h2>
-              {store.description && <p className="mt-1 text-sm text-ink-muted">{store.description}</p>}
-              <p className="mt-1 text-xs text-ink-faint">{store.productCount} products listed</p>
+              <h2 className="font-display text-4xl font-bold text-ink">{store.name}</h2>
+              {store.description && <p className="mt-1 text-ink-muted">{store.description}</p>}
+              <p className="mt-2 text-sm text-ink-faint">
+                <span className="num font-semibold text-ink">{store.productCount}</span> products listed
+              </p>
             </div>
             <Button variant="secondary" onClick={() => setEditingStore(true)} icon={<Pencil className="h-3.5 w-3.5" />}>
               Edit store
             </Button>
           </div>
         )}
-      </Reveal>
+      </section>
 
       {/* PRODUCTS */}
-      <Reveal delay={0.08}>
+      <section>
         <div className="flex items-center justify-between">
-          <h2 className="font-display text-xl font-semibold text-ink">Products</h2>
+          <h2 className="font-display text-3xl font-bold text-ink">Products</h2>
           <Button size="sm" onClick={openCreateForm} icon={<Plus className="h-4 w-4" />}>
             Add product
           </Button>
@@ -304,33 +302,29 @@ function StoreManager({
           {store.products.length === 0 ? (
             <EmptyState title="No products yet" message="Add your first product to start selling." />
           ) : (
-            <div className="flex flex-col gap-3">
+            <ul className="panel divide-y divide-border overflow-hidden">
               {store.products.map((p) => {
                 const sport = p.sport ? getSportBySlug(p.sport) : undefined;
                 return (
-                  <div key={p.id} className="glass flex flex-wrap items-center gap-4 rounded-2xl p-4">
+                  <li key={p.id} className="flex flex-wrap items-center gap-4 p-4">
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-surface-2">
                       {p.images?.[0] ? (
-                        <img src={p.images[0]} alt={p.name} className="h-full w-full object-cover" />
+                        <img src={assetUrl(p.images[0])} alt={p.name} className="h-full w-full object-cover" />
                       ) : (
-                        <div
-                          className="flex h-full w-full items-center justify-center text-xl"
-                          style={{ background: `${sport?.color ?? "#3a82ff"}22` }}
-                        >
-                          {sport?.emoji ?? "🛍️"}
-                        </div>
+                        <SportMark slug={p.sport} size="lg" className="!h-14 !w-14 opacity-60" />
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-ink">{p.name}</p>
-                      <p className="text-xs text-ink-faint">
+                      <p className="truncate font-semibold text-ink">{p.name}</p>
+                      <p className="text-sm text-ink-faint">
                         {p.category}
-                        {sport ? ` · ${sport.name}` : ""} · Rs {p.price}
+                        {sport ? `, ${sport.name}` : ""}
                       </p>
                     </div>
+                    <span className="num font-display text-xl font-bold text-ink">Rs {p.price}</span>
                     <span
-                      className={`text-xs font-semibold ${
-                        p.stock === 0 ? "text-red-400" : p.stock <= 5 ? "text-premium" : "text-ink-muted"
+                      className={`num w-24 text-right text-sm font-semibold ${
+                        p.stock === 0 ? "text-danger" : p.stock <= 5 ? "text-premium" : "text-ink-muted"
                       }`}
                     >
                       {p.stock === 0 ? "Out of stock" : `${p.stock} in stock`}
@@ -339,30 +333,30 @@ function StoreManager({
                       <button
                         onClick={() => openEditForm(p)}
                         disabled={editLoadingId === p.id}
-                        className="rounded-full p-2 text-ink-faint hover:bg-surface-2 hover:text-ink disabled:opacity-40"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink active:bg-base-2 disabled:opacity-40"
                         aria-label={`Edit ${p.name}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => deleteProduct(p)}
-                        className="rounded-full p-2 text-ink-faint hover:bg-red-500/10 hover:text-red-400"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger active:bg-danger/20"
                         aria-label={`Delete ${p.name}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
-                  </div>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           )}
         </div>
-      </Reveal>
+      </section>
 
       {/* ORDERS */}
-      <Reveal delay={0.14}>
-        <h2 className="font-display text-xl font-semibold text-ink">My store's orders</h2>
+      <section>
+        <h2 className="font-display text-3xl font-bold text-ink">My store’s orders</h2>
         <div className="mt-4">
           {ordersLoading && <Loading label="Loading orders..." />}
           {!ordersLoading && ordersError && <ErrorState message={ordersError} onRetry={loadOrders} />}
@@ -376,7 +370,7 @@ function StoreManager({
           {!ordersLoading && !ordersError && orders.length > 0 && (
             <div className="flex flex-col gap-3">
               {orders.map((order) => (
-                <div key={order.id} className="glass rounded-2xl p-5">
+                <div key={order.id} className="panel p-5">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="flex items-center gap-1.5 text-xs text-ink-faint">
                       <CalendarDays className="h-3.5 w-3.5" /> {new Date(order.createdAt).toLocaleDateString()}
@@ -387,9 +381,9 @@ function StoreManager({
                     {order.items.map((item, idx) => (
                       <div key={idx} className="flex items-center justify-between text-sm">
                         <span className="text-ink-muted">
-                          {item.name} × {item.quantity}
+                          {item.name} <span className="num text-ink-faint">× {item.quantity}</span>
                         </span>
-                        <span className="text-ink">Rs {item.price * item.quantity}</span>
+                        <span className="num text-ink">Rs {item.price * item.quantity}</span>
                       </div>
                     ))}
                   </div>
@@ -398,7 +392,7 @@ function StoreManager({
             </div>
           )}
         </div>
-      </Reveal>
+      </section>
     </div>
   );
 }
@@ -415,13 +409,13 @@ function EditStoreForm({
   const [name, setName] = useState(store.name);
   const [description, setDescription] = useState(store.description ?? "");
   const [logo, setLogo] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(store.logo);
+  const [preview, setPreview] = useState<string | null>(assetUrl(store.logo));
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   function onLogoChange(file: File | null) {
     setLogo(file);
-    setPreview(file ? URL.createObjectURL(file) : store.logo);
+    setPreview(file ? URL.createObjectURL(file) : assetUrl(store.logo));
   }
 
   async function onSubmit(e: FormEvent) {
@@ -445,11 +439,11 @@ function EditStoreForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="glass flex flex-col gap-5 rounded-3xl p-8">
+    <form onSubmit={onSubmit} className="panel flex flex-col gap-5 p-6 md:p-8">
       <div className="flex items-center gap-4">
         <label
           htmlFor="editStoreLogo"
-          className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-surface-2 text-ink-faint hover:border-accent/50"
+          className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-base-2 text-ink-faint transition-colors hover:border-accent/50"
         >
           {preview ? (
             <img src={preview} alt="Logo preview" className="h-full w-full object-cover" />
@@ -461,13 +455,13 @@ function EditStoreForm({
           id="editStoreLogo"
           type="file"
           accept="image/*"
-          className="hidden"
+          className="sr-only"
           onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
         />
       </div>
       <Input label="Store name" required value={name} onChange={(e) => setName(e.target.value)} />
       <Textarea label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <FormError>{error}</FormError>}
       <div className="flex gap-3">
         <Button type="submit" loading={loading}>
           Save changes
@@ -537,13 +531,13 @@ function ProductForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="glass flex flex-col gap-5 rounded-3xl p-8">
+    <form onSubmit={onSubmit} className="panel flex flex-col gap-5 p-6 md:p-8">
       <div className="flex items-center justify-between">
-        <h3 className="font-display text-lg font-semibold text-ink">{product ? "Edit product" : "New product"}</h3>
+        <h3 className="font-display text-2xl font-bold text-ink">{product ? "Edit product" : "New product"}</h3>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-full p-1.5 text-ink-faint hover:bg-surface-2 hover:text-ink"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-surface-2 hover:text-ink active:bg-base-2"
           aria-label="Close"
         >
           <X className="h-4 w-4" />
@@ -566,16 +560,16 @@ function ProductForm({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="text-sm font-medium text-ink-muted">
+          <label className="block text-sm font-medium text-ink-muted">
             Category <span className="text-accent">*</span>
           </label>
-          <div className="mt-1.5">
+          <div className="mt-2">
             <CustomSelect value={form.category} onChange={(v) => update("category", v)} options={SHOP_CATEGORY_OPTIONS} />
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium text-ink-muted">Sport</label>
-          <div className="mt-1.5">
+          <label className="block text-sm font-medium text-ink-muted">Sport</label>
+          <div className="mt-2">
             <CustomSelect
               value={form.sport}
               onChange={(v) => update("sport", v)}
@@ -608,13 +602,13 @@ function ProductForm({
       </div>
 
       <div>
-        <label className="text-sm font-medium text-ink-muted">Images</label>
+        <label className="block text-sm font-medium text-ink-muted">Images</label>
         <input
           type="file"
           accept="image/*"
           multiple
           onChange={(e) => setImages(Array.from(e.target.files ?? []))}
-          className="mt-1.5 block w-full text-sm text-ink-muted file:mr-3 file:rounded-full file:border-0 file:bg-accent-soft file:px-4 file:py-2 file:text-xs file:font-semibold file:text-accent hover:file:bg-accent/20"
+          className="mt-2 block w-full rounded-xl border border-dashed border-border bg-base-2 p-3 text-sm text-ink-muted file:mr-3 file:h-9 file:rounded-full file:border-0 file:bg-accent-soft file:px-4 file:text-sm file:font-semibold file:text-accent hover:file:bg-accent/20"
         />
         {product?.images?.length ? (
           <p className="mt-1.5 text-xs text-ink-faint">
@@ -623,7 +617,7 @@ function ProductForm({
         ) : null}
       </div>
 
-      {error && <p className="text-sm text-red-400">{error}</p>}
+      {error && <FormError>{error}</FormError>}
       <div className="flex gap-3">
         <Button type="submit" loading={loading}>
           {product ? "Save changes" : "Add product"}

@@ -227,6 +227,8 @@ export function toOrderSummary(o: any) {
     status: o.status,
     shippingAddress: o.shippingAddress,
     shippingProvince: o.shippingProvince ?? undefined,
+    contactName: o.contactName ?? undefined,
+    contactPhone: o.contactPhone ?? undefined,
     createdAt: o.createdAt ? new Date(o.createdAt).toISOString() : null,
     payment: o.payment ? toPaymentSummary(o.payment) : null,
   };
@@ -238,5 +240,50 @@ export function toMembershipSummary(m: any) {
     plan: m.plan,
     startedAt: m.startedAt ? new Date(m.startedAt).toISOString() : null,
     expiresAt: m.expiresAt ? new Date(m.expiresAt).toISOString() : null,
+  };
+}
+
+function toChallengeSide(user: any, team: any) {
+  if (team && team.name) {
+    return {
+      kind: "team" as const,
+      id: team._id?.toString() ?? team.id,
+      name: team.name,
+      image: team.logo ?? null,
+      ownerId: team.owner ? team.owner._id?.toString() ?? team.owner.toString() : null,
+      memberCount: Array.isArray(team.members) ? team.members.length : undefined,
+    };
+  }
+  if (user && user.name) {
+    return {
+      kind: "player" as const,
+      id: user._id?.toString() ?? user.id,
+      name: user.name,
+      image: user.photo ?? null,
+      ownerId: user._id?.toString() ?? user.id,
+    };
+  }
+  return null;
+}
+
+export function toChallengeJSON(c: any) {
+  return {
+    id: c._id?.toString() ?? c.id,
+    sport: c.sport,
+    mode: c.mode,
+    status: c.status,
+    date: c.date,
+    startTime: c.startTime,
+    endTime: c.endTime,
+    challenger: toChallengeSide(c.challenger, c.challengerTeam),
+    challengerUserId: c.challenger?._id?.toString() ?? c.challenger?.toString() ?? null,
+    opponent: toChallengeSide(c.opponentUser, c.opponentTeam),
+    acceptedBy: toChallengeSide(c.acceptedBy, c.acceptedTeam),
+    acceptedByUserId: c.acceptedBy?._id?.toString() ?? (c.acceptedBy ? c.acceptedBy.toString() : null),
+    ground: c.ground && c.ground.name ? toGroundSummary(c.ground) : null,
+    province: c.province ?? undefined,
+    venueNote: c.venueNote ?? undefined,
+    message: c.message ?? undefined,
+    createdAt: c.createdAt ? new Date(c.createdAt).toISOString() : null,
   };
 }

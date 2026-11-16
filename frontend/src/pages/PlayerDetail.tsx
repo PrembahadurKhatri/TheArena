@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Crown, Mail, Phone, User } from "lucide-react";
-import api from "@/api/axios";
+import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, Crown, Mail, Phone } from "lucide-react";
+import api, { assetUrl } from "@/api/axios";
 import type { PlayerProfile } from "@/types";
 import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
 import { Loading, ErrorState } from "@/components/ui/StateBlock";
+import { Initials } from "@/components/ui/SportMark";
 
 export default function PlayerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -25,59 +25,84 @@ export default function PlayerDetail() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  if (loading) return <Loading label="Loading player..." />;
+  if (loading) return <Loading label="Loading player…" />;
   if (error || !player) return <ErrorState message={error || "Player not found."} />;
 
-  return (
-    <main className="flex-1 py-16">
-      <div className="container-x max-w-2xl">
-        <Reveal>
-          <div className="glass flex flex-col items-center gap-4 rounded-3xl p-10 text-center">
-            {player.photo ? (
-              <img src={player.photo} alt={player.name} className="h-24 w-24 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-accent-soft text-accent">
-                <User className="h-9 w-9" />
-              </div>
-            )}
-            <div className="flex items-center gap-2">
-              <h1 className="font-display text-3xl font-bold text-ink">{player.name}</h1>
-              {player.isPremium && <Crown className="h-5 w-5 text-premium" />}
-            </div>
-            {player.isPremium && <span className="eyebrow-premium">Premium Member</span>}
+  const sports = player.sportPreferences ?? [];
 
-            <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
-              {player.sportPreferences?.length ? (
-                player.sportPreferences.map((slug) => {
-                  const s = getSportBySlug(slug);
-                  return (
-                    <span key={slug} className="rounded-full bg-surface-2 px-3 py-1.5 text-xs text-ink-muted">
-                      {s?.emoji} {s?.name ?? slug}
-                    </span>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-ink-faint">No sport preferences listed.</p>
-              )}
-            </div>
+  return (
+    <main className="flex-1">
+      <section className="border-b border-border bg-base-2">
+        <div className="container-x grid gap-10 py-12 md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] md:items-end md:py-16">
+          <div className="relative aspect-[4/5] w-full max-w-sm overflow-hidden rounded-3xl border border-border bg-surface">
+            {player.photo ? (
+              <img src={assetUrl(player.photo)} alt={player.name} className="h-full w-full object-cover" />
+            ) : (
+              <Initials name={player.name} className="h-full w-full bg-surface text-8xl text-ink-faint" />
+            )}
+          </div>
+
+          <div className="min-w-0">
+            <Link to="/players" className="inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
+              <ArrowLeft className="h-4 w-4" /> All players
+            </Link>
+            {player.isPremium && (
+              <p className="mt-8 inline-flex items-center gap-1.5 rounded-full border border-premium/30 bg-premium-soft px-3 py-1 text-sm font-semibold text-premium">
+                <Crown className="h-3.5 w-3.5" /> Premium member
+              </p>
+            )}
+            <h1 className="mt-4 font-display text-6xl font-bold leading-[0.92] text-ink md:text-8xl">{player.name}</h1>
 
             {(player.email || player.phone) && (
-              <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4 text-sm text-ink-muted">
+              <div className="mt-8 flex flex-wrap gap-3">
                 {player.email && (
-                  <span className="flex items-center gap-2">
-                    <Mail className="h-3.5 w-3.5" /> {player.email}
-                  </span>
+                  <a
+                    href={`mailto:${player.email}`}
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm text-ink-muted transition-colors hover:border-ink-faint/60 hover:text-ink active:bg-surface-2"
+                  >
+                    <Mail className="h-4 w-4" /> {player.email}
+                  </a>
                 )}
                 {player.phone && (
-                  <span className="flex items-center gap-2">
-                    <Phone className="h-3.5 w-3.5" /> {player.phone}
-                  </span>
+                  <a
+                    href={`tel:${player.phone}`}
+                    className="inline-flex h-11 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm text-ink-muted transition-colors hover:border-ink-faint/60 hover:text-ink active:bg-surface-2"
+                  >
+                    <Phone className="h-4 w-4" /> {player.phone}
+                  </a>
                 )}
               </div>
             )}
           </div>
-        </Reveal>
-      </div>
+        </div>
+      </section>
+
+      <section className="container-x py-12 md:py-16">
+        <h2 className="font-display text-3xl font-bold text-ink">Plays</h2>
+        {sports.length ? (
+          <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-4">
+            {sports.map((slug) => {
+              const s = getSportBySlug(slug);
+              return (
+                <li key={slug}>
+                  <Link
+                    to={`/players?sport=${slug}`}
+                    className="panel card-lift relative flex aspect-[16/10] items-end overflow-hidden"
+                  >
+                    {s?.image && (
+                      <img src={s.image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-70" />
+                    )}
+                    <span className="photo-veil-bottom absolute inset-0" />
+                    <span className="relative p-4 font-display text-2xl font-bold text-ink">{s?.name ?? slug}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="mt-4 text-sm text-ink-faint">No sport preferences listed.</p>
+        )}
+      </section>
     </main>
   );
 }

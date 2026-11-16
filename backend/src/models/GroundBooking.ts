@@ -30,4 +30,9 @@ const groundBookingSchema = new Schema<IGroundBooking>(
   { timestamps: true }
 );
 
+// Overlap checks query by ground + date + status.
+groundBookingSchema.index({ ground: 1, date: 1, status: 1 });
+groundBookingSchema.index({ user: 1, createdAt: -1 });
+groundBookingSchema.index({ status: 1, createdAt: 1 });
+
 export const GroundBooking = model<IGroundBooking>("GroundBooking", groundBookingSchema);

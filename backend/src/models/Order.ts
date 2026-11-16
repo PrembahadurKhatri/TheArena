@@ -20,6 +20,8 @@ export interface IOrder extends Document {
   status: OrderStatus;
   shippingAddress: string;
   shippingProvince?: string;
+  contactName?: string;
+  contactPhone?: string;
   payment: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
@@ -45,9 +47,15 @@ const orderSchema = new Schema<IOrder>(
     status: { type: String, enum: ["pending_payment", "paid", "cancelled"], default: "pending_payment" },
     shippingAddress: { type: String, required: true },
     shippingProvince: { type: String, enum: PROVINCES },
+    contactName: { type: String, trim: true, maxlength: 100 },
+    contactPhone: { type: String, trim: true, maxlength: 30 },
     payment: { type: Schema.Types.ObjectId, ref: "Payment", default: null },
   },
   { timestamps: true }
 );
+
+orderSchema.index({ buyer: 1, createdAt: -1 });
+orderSchema.index({ "items.store": 1, createdAt: -1 });
+orderSchema.index({ status: 1, createdAt: 1 });
 
 export const Order = model<IOrder>("Order", orderSchema);

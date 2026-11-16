@@ -7,13 +7,26 @@ import { fileToUrlPath } from "../utils/upload";
 import * as productsService from "../services/productsService";
 
 export const listProducts = asyncHandler(async (req: Request, res: Response) => {
-  const { sport, category, search, storeId } = req.query as {
+  const { sport, category, search, storeId, minPrice, maxPrice, inStock, sort } = req.query as {
     sport?: string;
     category?: string;
     search?: string;
     storeId?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    inStock?: string;
+    sort?: string;
   };
-  const products = await productsService.listProducts({ sport, category, search, storeId });
+  const products = await productsService.listProducts({
+    sport,
+    category,
+    search,
+    storeId,
+    minPrice,
+    maxPrice,
+    inStock,
+    sort,
+  });
   res.status(200).json({ products: products.map(toProductDetail) });
 });
 

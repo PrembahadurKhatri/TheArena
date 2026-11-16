@@ -1,4 +1,4 @@
-import Reveal from "@/components/Reveal";
+import LegalDoc from "@/components/page/LegalDoc";
 
 const SECTIONS = [
   {
@@ -20,23 +20,5 @@ const SECTIONS = [
 ];
 
 export default function Privacy() {
-  return (
-    <main className="flex-1 py-24">
-      <div className="container-x max-w-2xl">
-        <Reveal>
-          <span className="eyebrow">Legal</span>
-          <h1 className="mt-4 font-display text-4xl font-bold text-ink">Privacy Policy</h1>
-          <p className="mt-3 text-sm text-ink-faint">Last updated September 2026</p>
-        </Reveal>
-        <div className="mt-10 flex flex-col gap-8">
-          {SECTIONS.map((s, i) => (
-            <Reveal key={s.title} delay={0.06 + i * 0.05}>
-              <h2 className="font-display text-xl font-semibold text-ink">{s.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-ink-muted">{s.text}</p>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </main>
-  );
+  return <LegalDoc title="Privacy Policy" updated="Last updated September 2026" sections={SECTIONS} />;
 }

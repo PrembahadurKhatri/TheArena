@@ -31,11 +31,11 @@ Tournaments page's "Near Me" filter — see `GET /api/tournaments` below.
 
 ## Auth
 
-- `POST /api/auth/register` — body `{ name, email, password, phone?, location?, province? }` → `201 { token, user }`
+- `POST /api/auth/register` — body `{ name, email, password, phone?, location?, province? }` → `201 { token, user }`. Password min 8 chars; email must be valid. Rate-limited (with login/reset) to 20 requests / 15 min per IP → `429`.
 - `POST /api/auth/login` — body `{ email, password }` → `200 { token, user }`
 - `GET /api/auth/me` — Bearer token → `200 { user }`
 - `PATCH /api/auth/me` — Bearer token, multipart if `photo` file included, else JSON. Body: any of `{ name, phone, photo, location, province, sportPreferences[] }` → `200 { user }`
-- `POST /api/auth/forgot-password` — body `{ email }` → `200 { message }` (emails a reset link if SMTP configured, else logs the link to console — see `backend/src/utils/sendEmail.ts` pattern)
+- `POST /api/auth/forgot-password` — body `{ email }` → `200 { message }` (rate-limited 5/hour per IP; the reset token is stored only as a SHA-256 hash, valid 1 hour, single use) (emails a reset link if SMTP configured, else logs the link to console — see `backend/src/utils/sendEmail.ts` pattern)
 - `POST /api/auth/reset-password/:token` — body `{ password }` → `200 { message }`
 
 **`user` object shape** (returned everywhere a user is embedded):
@@ -86,7 +86,7 @@ if `req.user.isPremium` is false or `membershipExpiresAt` has passed.
 ## Players
 
 - `GET /api/players?sport=<slug>&search=<q>` → `200 { players: [PlayerSummary] }` (public — lists users with that sport in `sportPreferences`)
-- `GET /api/players/:id` → `200 { player: PlayerProfile } }` (public profile)
+- `GET /api/players/:id` → `200 { player }` — `PlayerProfile` (with `email`/`phone`) only when the viewer is that player (optional Bearer token); everyone else gets `PlayerSummary`.
 
 `PlayerSummary`: `{ id, name, photo, sportPreferences, isPremium }`
 
@@ -107,7 +107,8 @@ if `req.user.isPremium` is false or `membershipExpiresAt` has passed.
 
 - `GET /api/grounds?sport=<slug>&search=<q>` → `200 { grounds: [GroundSummary] }` (public)
 - `GET /api/grounds/:id` → `200 { ground: GroundDetail }`
-- `POST /api/ground-bookings` — auth. Body `{ groundId, date, startTime, endTime }`. Server computes `hours` and `totalAmount = ground.pricePerHour * hours`, applying a **10% discount if `req.user.isPremium`**. Creates booking `status: "pending_payment"` → `201 { booking }`
+- `POST /api/ground-bookings` — auth. Body `{ groundId, date, startTime, endTime }`. Server computes `hours` and `totalAmount = ground.pricePerHour * hours`, applying a **10% discount if `req.user.isPremium`**. Creates booking `status: "pending_payment"` → `201 { booking }`.
+  `date` is `YYYY-MM-DD`, times are Nepal time (`HH:MM`); past slots, >12h and >90 days ahead are rejected (`400`). Overlapping a confirmed booking, or an unpaid one less than `BOOKING_HOLD_MINUTES` (15) old, → `409`. Unpaid bookings are auto-cancelled after the hold expires. The premium discount only applies while membership is unexpired.
 - `GET /api/my/bookings` — auth → `200 { bookings: [BookingSummary] }`
 
 `GroundSummary`: `{ id, name, sport, location, pricePerHour, image }`
@@ -126,14 +127,15 @@ sandbox confirm step standing in for a live Khalti/eSewa call (no live keys yet)
     `process.env.MEMBERSHIP_MONTHLY_PRICE` / `MEMBERSHIP_YEARLY_PRICE`.
   - `type: "shop_order"`: `refId` = order id. Amount = `order.totalAmount`.
   - Creates a `Payment` doc, `status: "pending"`, `provider: "TEST"`. → `201 { payment: PaymentSummary }`
+  - Idempotent: if a pending payment already exists for that booking/order (or the same membership plan), it is returned instead of creating a second one.
 - `POST /api/payments/:id/confirm` — auth, must own the payment. Simulates the gateway
-  callback: sets `payment.status = "success"`, and:
+  callback. **Only allowed when test payments are enabled** (`PAYMENT_MODE=test`; default on in development, off in production → `503`). Atomic: a payment can only be confirmed once (`400`/`409` otherwise). If the booking/order expired or the slot was taken meanwhile → payment marked failed, `409`. On success sets `payment.status = "success"`, and:
   - if `type === "ground_booking"`: sets that `GroundBooking.status = "confirmed"`
   - if `type === "membership"`: creates/extends a `Membership` doc and sets
     `user.isPremium = true`, `user.membershipExpiresAt` (+30 days for monthly, +365 for yearly)
   - if `type === "shop_order"`: sets that `Order.status = "paid"`
   → `200 { payment, redirect: "/dashboard" }`
-- `POST /api/payments/:id/fail` — auth. Sets `payment.status = "failed"` → `200 { payment }`
+- `POST /api/payments/:id/fail` — auth. Sets `payment.status = "failed"` → `200 { payment }`. Also cancels the booking, or cancels the order and restores its stock.
 
 `PaymentSummary`: `{ id, type, amount, status, provider, createdAt }`
 
@@ -185,7 +187,7 @@ products are generic (e.g. a water bottle) and don't belong to one sport.
 
 ### Products
 
-- `GET /api/shop/products?sport=<slug>&category=<name>&search=<q>&storeId=<id>` → `200 { products: [ProductSummary] }` (public — all filters optional and combinable)
+- `GET /api/shop/products?sport=<slug>&category=<name>&search=<q>&storeId=<id>&minPrice=<n>&maxPrice=<n>&inStock=1&sort=<newest|price_asc|price_desc|name_asc>` → `200 { products: [ProductSummary] }` (public — all filters optional and combinable; `sort` defaults to `newest`; a negative or non-numeric price bound is a 400)
 - `GET /api/shop/products/:id` → `200 { product: ProductDetail }` (public)
 - `POST /api/shop/products` — auth, caller must own a store, multipart if `images` files included. Body `{ name, description?, category, sport?, price, stock }` → `201 { product }`
 - `PATCH /api/shop/products/:id` — store owner only → `200 { product }`
@@ -204,10 +206,10 @@ live `Product` documents.
 
 ### Orders / Checkout
 
-- `POST /api/shop/orders` — auth. Body `{ items: [{ productId, quantity }], shippingAddress, shippingProvince? }`.
+- `POST /api/shop/orders` — auth. Body `{ items: [{ productId, quantity }], shippingAddress, shippingProvince?, contactName?, contactPhone? }`.
   Server re-reads each `Product` fresh, 400s if any item's `quantity` exceeds
   current `stock`, computes `totalAmount` server-side (never trusts a client
-  price), **decrements stock immediately**, and snapshots each line item's
+  price), **reserves stock immediately with an atomic conditional decrement** (no overselling under concurrency; duplicate lines for one product are merged; quantity must be a positive integer), and snapshots each line item's
   name/price/store at purchase time (so later store/price edits don't rewrite
   order history). Creates `Order` with `status: "pending_payment"` →
   `201 { order }`. Checkout continues through the shared
@@ -222,12 +224,16 @@ live `Product` documents.
 (`product` is the id at time of purchase — may point at a since-deleted product, hence nullable in spirit even though it's stored as an id)
 `OrderSummary`: `{ id, items: OrderItem[], totalAmount, status, shippingAddress, shippingProvince?, createdAt, payment: PaymentSummary | null }`
 
-`status` values: `pending_payment | paid | cancelled`
+`status` values: `pending_payment | paid | cancelled`. An unpaid order is cancelled and its stock restored when its payment fails, or automatically after `ORDER_HOLD_MINUTES` (30).
 
 ## Error shape
 
-Every error response: `{ message: string }`, appropriate HTTP status (400/401/403/404/409/500).
+Every error response: `{ message: string }`, appropriate HTTP status (400/401/403/404/409/429/500/503). 500 responses never include internal details or stack traces.
+
+## Health
+
+- `GET /api/health` → `200 { ok: true, db: "connected", paymentMode, uptimeSeconds }`, or `503` with `db: "disconnected"` while MongoDB is unreachable. Not rate-limited. Used as Render's health check path.
 
 ## Environment (backend/.env — already created, see backend/.env.example)
 
-`PORT`, `MONGO_URI`, `JWT_SECRET`, `CLIENT_URL`, `SMTP_*` (optional), `MEMBERSHIP_MONTHLY_PRICE`, `MEMBERSHIP_YEARLY_PRICE`.
+See `backend/.env.example` for the full, commented list. Required: `MONGO_URI`, `JWT_SECRET` (32+ chars in production), `CLIENT_URL` (comma-separated allowed origins; required in production), `MEMBERSHIP_MONTHLY_PRICE`, `MEMBERSHIP_YEARLY_PRICE`. Optional: `PAYMENT_MODE`, `SMTP_*`, `UPLOADS_DIR`, `BOOKING_HOLD_MINUTES`, `ORDER_HOLD_MINUTES`, rate-limit and seed settings.

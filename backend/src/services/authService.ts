@@ -6,8 +6,16 @@ import { signToken } from "../utils/jwt";
 import { sendEmail } from "../utils/sendEmail";
 import { isValidSportSlug } from "../utils/sports";
 import { isValidProvince } from "../utils/provinces";
+import { getPrimaryClientUrl } from "../config/env";
+import { requireEmail, requireNewPassword, requireString, optionalString } from "../utils/validation";
 
 const SALT_ROUNDS = 10;
+
+// Reset tokens are emailed in plain form but stored only as a SHA-256 hash,
+// so a database leak doesn't hand out working reset links.
+function hashResetToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 export async function registerUser(input: {
   name: string;
@@ -17,15 +25,17 @@ export async function registerUser(input: {
   location?: string;
   province?: string;
 }) {
-  const { name, email, password, phone, location, province } = input;
-  if (!name || !email || !password) {
-    throw new AppError(400, "name, email and password are required");
-  }
+  const name = requireString(input.name, "name", { max: 80 });
+  const email = requireEmail(input.email);
+  const password = requireNewPassword(input.password);
+  const phone = optionalString(input.phone, "phone", 20);
+  const location = optionalString(input.location, "location", 120);
+  const province = input.province || undefined;
   if (province && !isValidProvince(province)) {
     throw new AppError(400, `Invalid province: ${province}`);
   }
 
-  const existing = await User.findOne({ email: email.toLowerCase() });
+  const existing = await User.findOne({ email });
   if (existing) {
     throw new AppError(409, "An account with this email already exists");
   }
@@ -33,7 +43,7 @@ export async function registerUser(input: {
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
   const user = await User.create({
     name,
-    email: email.toLowerCase(),
+    email,
     passwordHash,
     phone,
     location,
@@ -46,11 +56,11 @@ export async function registerUser(input: {
 
 export async function loginUser(input: { email: string; password: string }) {
   const { email, password } = input;
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
     throw new AppError(400, "email and password are required");
   }
 
-  const user = await User.findOne({ email: email.toLowerCase() }).select("+passwordHash");
+  const user = await User.findOne({ email: email.trim().toLowerCase() }).select("+passwordHash");
   if (!user) {
     throw new AppError(401, "Invalid email or password");
   }
@@ -75,10 +85,10 @@ export async function updateMe(
     sportPreferences?: string[];
   }
 ) {
-  if (updates.name !== undefined) user.name = updates.name;
-  if (updates.phone !== undefined) user.phone = updates.phone;
+  if (updates.name !== undefined) user.name = requireString(updates.name, "name", { max: 80 });
+  if (updates.phone !== undefined) user.phone = optionalString(updates.phone, "phone", 20);
   if (updates.photo !== undefined) user.photo = updates.photo;
-  if (updates.location !== undefined) user.location = updates.location;
+  if (updates.location !== undefined) user.location = optionalString(updates.location, "location", 120);
   if (updates.province !== undefined) {
     if (updates.province && !isValidProvince(updates.province)) {
       throw new AppError(400, `Invalid province: ${updates.province}`);
@@ -99,8 +109,8 @@ export async function updateMe(
 }
 
 export async function forgotPassword(email: string) {
-  if (!email) throw new AppError(400, "email is required");
-  const user = await User.findOne({ email: email.toLowerCase() });
+  if (typeof email !== "string" || !email) throw new AppError(400, "email is required");
+  const user = await User.findOne({ email: email.trim().toLowerCase() });
 
   // Always respond the same way regardless of whether the user exists,
   // to avoid leaking account existence.
@@ -109,12 +119,11 @@ export async function forgotPassword(email: string) {
   }
 
   const token = crypto.randomBytes(32).toString("hex");
-  user.resetPasswordToken = token;
+  user.resetPasswordToken = hashResetToken(token);
   user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
   await user.save();
 
-  const clientUrl = process.env.CLIENT_URL ?? "http://localhost:5173";
-  const link = `${clientUrl}/reset-password/${token}`;
+  const link = `${getPrimaryClientUrl()}/reset-password/${token}`;
 
   await sendEmail({
     to: user.email,
@@ -127,12 +136,13 @@ export async function forgotPassword(email: string) {
 }
 
 export async function resetPassword(token: string, password: string) {
-  if (!token || !password) {
+  if (typeof token !== "string" || !token) {
     throw new AppError(400, "token and password are required");
   }
+  const newPassword = requireNewPassword(password);
 
   const user = await User.findOne({
-    resetPasswordToken: token,
+    resetPasswordToken: hashResetToken(token),
     resetPasswordExpires: { $gt: new Date() },
   });
 
@@ -140,7 +150,7 @@ export async function resetPassword(token: string, password: string) {
     throw new AppError(400, "Invalid or expired reset token");
   }
 
-  user.passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  user.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
   user.resetPasswordToken = null;
   user.resetPasswordExpires = null;
   await user.save();

@@ -25,4 +25,8 @@ const teamSchema = new Schema<ITeam>(
   { timestamps: true }
 );
 
+teamSchema.index({ owner: 1 });
+teamSchema.index({ members: 1 });
+teamSchema.index({ sport: 1, createdAt: -1 });
+
 export const Team = model<ITeam>("Team", teamSchema);

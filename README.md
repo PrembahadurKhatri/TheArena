@@ -26,7 +26,7 @@ See [`API_CONTRACT.md`](./API_CONTRACT.md) for the full API reference.
 cd backend
 cp .env.example .env   # fill in MONGO_URI, JWT_SECRET, etc.
 npm install
-npm run seed            # seeds the 10 sports + sample grounds
+npm run seed            # seeds the 10 sports + sample grounds (+ a demo shop in development)
 npm run dev
 ```
 
@@ -39,3 +39,11 @@ npm run dev
 ```
 
 The Vite dev server proxies `/api` and `/uploads` to the backend on `localhost:5050` — see `frontend/vite.config.ts`.
+
+## Deployment
+
+- **Backend → Render** (Web Service). Root Directory `backend`, Build `npm ci --include=dev && npm run build`, Start `npm start`, Health Check `/api/health`. Environment variables are documented in `backend/.env.example`; `render.yaml` is an optional Blueprint with the same settings.
+- **Frontend → Vercel**. Root Directory `frontend`, framework Vite. Set `VITE_API_URL` to the Render URL (no trailing slash, no `/api`). `frontend/vercel.json` makes deep links like `/teams/123` work on refresh.
+- **Database → MongoDB Atlas**. Seed once from your machine: `cd backend && npm run build && MONGO_URI="<atlas uri>" NODE_ENV=production npm run seed:prod` (sports + grounds; the demo shop is skipped unless `SEED_DEMO_SHOP=true`).
+- **Payments**: test mode is **off in production** unless `PAYMENT_MODE=test`. Turning it on lets any user confirm their own payment (free premium) — demo use only.
+- **Uploads**: stored on local disk. Render's filesystem is wiped on each deploy/restart, so attach a Render persistent disk and set `UPLOADS_DIR`, or move uploads to object storage.

@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Check, Shield, UserMinus, UserPlus, Users, X } from "lucide-react";
-import api from "@/api/axios";
+import { ArrowLeft, Check, CheckCircle2, UserMinus, UserPlus, X } from "lucide-react";
+import api, { assetUrl } from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
 import type { TeamDetail as TeamDetailType } from "@/types";
 import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
-import Reveal from "@/components/Reveal";
 import { Loading, ErrorState } from "@/components/ui/StateBlock";
 import Button from "@/components/ui/Button";
+import SportMark, { Initials } from "@/components/ui/SportMark";
+import PageHero from "@/components/page/PageHero";
+import { FormError } from "@/components/page/AuthShell";
 
 export default function TeamDetail() {
   const { id } = useParams<{ id: string }>();
@@ -76,7 +78,7 @@ export default function TeamDetail() {
     }
   }
 
-  if (loading) return <Loading label="Loading team..." />;
+  if (loading) return <Loading label="Loading team…" />;
   if (error || !team) return <ErrorState message={error || "Team not found."} onRetry={load} />;
 
   const sport = getSportBySlug(team.sport);
@@ -84,91 +86,130 @@ export default function TeamDetail() {
   const isMember = user && team.members?.some((m) => m.id === user.id);
 
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x">
-        <Reveal>
-          <div className="glass flex flex-col gap-6 rounded-3xl p-8 sm:flex-row sm:items-center">
+    <main className="flex-1">
+      <PageHero
+        image={sport?.image}
+        above={
+          <Link to="/teams" className="inline-flex items-center gap-1.5 hover:text-ink">
+            <ArrowLeft className="h-4 w-4" /> All teams
+          </Link>
+        }
+        title={
+          <span className="flex flex-col gap-5 sm:flex-row sm:items-end">
             {team.logo ? (
-              <img src={team.logo} alt={team.name} className="h-24 w-24 rounded-2xl object-cover" />
+              <img
+                src={assetUrl(team.logo)}
+                alt={team.name}
+                className="h-24 w-24 shrink-0 rounded-2xl border-4 border-base object-cover md:h-28 md:w-28"
+              />
             ) : (
-              <div
-                className="flex h-24 w-24 items-center justify-center rounded-2xl text-4xl"
-                style={{ background: `${sport?.color ?? "#3a82ff"}22` }}
-              >
-                {sport?.emoji ?? <Shield className="h-10 w-10 text-accent" />}
-              </div>
+              <SportMark slug={team.sport} size="xl" className="border-4 border-base" />
             )}
-            <div className="flex-1">
-              <span className="eyebrow">{sport?.name ?? team.sport}</span>
-              <h1 className="mt-3 font-display text-3xl font-bold text-ink md:text-4xl">{team.name}</h1>
-              <p className="mt-1.5 flex items-center gap-1.5 text-sm text-ink-muted">
-                <Users className="h-3.5 w-3.5" /> {team.memberCount} members · owned by {team.owner?.name}
-              </p>
-            </div>
-
+            <span className="min-w-0">{team.name}</span>
+          </span>
+        }
+        actions={
+          <>
             {!isOwner && !isMember && (
-              <Button onClick={requestJoin} loading={busy === "join"} disabled={joinSent} icon={<UserPlus className="h-4 w-4" />}>
+              <Button
+                size="lg"
+                onClick={requestJoin}
+                loading={busy === "join"}
+                disabled={joinSent}
+                icon={joinSent ? <CheckCircle2 className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+              >
                 {joinSent ? "Request sent" : "Request to join"}
               </Button>
             )}
             {isMember && !isOwner && (
-              <span className="rounded-full bg-emerald-500/10 px-4 py-2 text-sm font-semibold text-emerald-400">
-                You're a member
+              <span className="inline-flex h-12 items-center gap-2 rounded-full border border-success/25 bg-success/10 px-5 text-sm font-semibold text-success">
+                <CheckCircle2 className="h-4 w-4" /> You’re a member
               </span>
             )}
+          </>
+        }
+      >
+        <dl className="flex flex-wrap gap-x-10 gap-y-3">
+          <div>
+            <dt className="text-sm text-ink-faint">Sport</dt>
+            <dd className="mt-0.5 font-semibold text-ink">{sport?.name ?? team.sport}</dd>
           </div>
-        </Reveal>
+          <div>
+            <dt className="text-sm text-ink-faint">Members</dt>
+            <dd className="num mt-0.5 font-semibold text-ink">{team.memberCount}</dd>
+          </div>
+          <div>
+            <dt className="text-sm text-ink-faint">Owner</dt>
+            <dd className="mt-0.5 font-semibold text-ink">{team.owner?.name}</dd>
+          </div>
+        </dl>
+      </PageHero>
 
-        {actionError && <p className="mt-4 text-sm text-red-400">{actionError}</p>}
+      <div className="container-x py-12 md:py-16">
+        {actionError && (
+          <div className="mb-8">
+            <FormError>{actionError}</FormError>
+          </div>
+        )}
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-3">
-          <Reveal delay={0.08} className="lg:col-span-2">
-            <h2 className="font-display text-xl font-semibold text-ink">Roster</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className={`grid gap-10 ${isOwner ? "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : ""}`}>
+          <section>
+            <div className="flex items-baseline justify-between">
+              <h2 className="font-display text-3xl font-bold text-ink">Roster</h2>
+              <span className="num text-sm text-ink-faint">{team.members?.length ?? 0} players</span>
+            </div>
+            <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,16rem),1fr))] gap-3">
               {team.members?.length ? (
                 team.members.map((m) => (
-                  <div key={m.id} className="glass flex items-center justify-between rounded-xl p-4">
-                    <Link to={`/players/${m.id}`} className="flex items-center gap-3">
+                  <li key={m.id} className="panel flex items-center justify-between gap-3 p-3 pr-4">
+                    <Link to={`/players/${m.id}`} className="group flex min-w-0 items-center gap-3">
                       {m.photo ? (
-                        <img src={m.photo} alt={m.name} className="h-10 w-10 rounded-full object-cover" />
+                        <img src={assetUrl(m.photo)} alt="" className="h-12 w-12 rounded-full object-cover" />
                       ) : (
-                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft text-accent">
-                          {m.name.charAt(0).toUpperCase()}
-                        </div>
+                        <Initials name={m.name} className="h-12 w-12 rounded-full text-lg" />
                       )}
-                      <span className="text-sm font-medium text-ink hover:text-accent">{m.name}</span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-semibold text-ink group-hover:text-accent">{m.name}</span>
+                        {m.id === team.owner?.id && <span className="block text-xs text-premium">Owner</span>}
+                      </span>
                     </Link>
                     {isOwner && m.id !== user?.id && (
                       <button
                         onClick={() => removeMember(m.id)}
                         disabled={busy === m.id}
-                        className="rounded-full p-1.5 text-ink-faint hover:bg-red-500/10 hover:text-red-400"
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger active:bg-danger/20 disabled:opacity-40"
                         aria-label={`Remove ${m.name}`}
                       >
                         <UserMinus className="h-4 w-4" />
                       </button>
                     )}
-                  </div>
+                  </li>
                 ))
               ) : (
-                <p className="text-sm text-ink-muted">No members yet.</p>
+                <li className="text-sm text-ink-muted">No members yet.</li>
               )}
-            </div>
-          </Reveal>
+            </ul>
+          </section>
 
           {isOwner && (
-            <Reveal delay={0.14}>
-              <h2 className="font-display text-xl font-semibold text-ink">Pending requests</h2>
-              <div className="mt-4 flex flex-col gap-3">
+            <aside className="panel self-start p-6">
+              <div className="flex items-baseline justify-between">
+                <h2 className="font-display text-2xl font-bold text-ink">Pending requests</h2>
+                <span className="num text-sm text-ink-faint">{team.pendingRequests?.length ?? 0}</span>
+              </div>
+              <ul className="mt-5 flex flex-col divide-y divide-border">
                 {team.pendingRequests?.length ? (
                   team.pendingRequests.map((r) => (
-                    <div key={r.id} className="glass flex items-center justify-between rounded-xl p-4">
-                      <span className="text-sm font-medium text-ink">{r.name}</span>
-                      <div className="flex gap-2">
+                    <li key={r.id} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="flex min-w-0 items-center gap-3">
+                        <Initials name={r.name} className="h-9 w-9 rounded-full text-sm" />
+                        <span className="truncate text-sm font-medium text-ink">{r.name}</span>
+                      </span>
+                      <span className="flex shrink-0 gap-2">
                         <button
                           onClick={() => respondToRequest(r.id, "accept")}
                           disabled={busy === r.id}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-success/10 text-success transition-colors hover:bg-success/20 active:bg-success/25 disabled:opacity-40"
                           aria-label="Accept"
                         >
                           <Check className="h-4 w-4" />
@@ -176,19 +217,19 @@ export default function TeamDetail() {
                         <button
                           onClick={() => respondToRequest(r.id, "reject")}
                           disabled={busy === r.id}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                          className="flex h-9 w-9 items-center justify-center rounded-full bg-danger/10 text-danger transition-colors hover:bg-danger/20 active:bg-danger/25 disabled:opacity-40"
                           aria-label="Reject"
                         >
                           <X className="h-4 w-4" />
                         </button>
-                      </div>
-                    </div>
+                      </span>
+                    </li>
                   ))
                 ) : (
-                  <p className="text-sm text-ink-muted">No pending requests.</p>
+                  <li className="text-sm text-ink-muted">No pending requests.</li>
                 )}
-              </div>
-            </Reveal>
+              </ul>
+            </aside>
           )}
         </div>
       </div>

@@ -23,4 +23,6 @@ const membershipSchema = new Schema<IMembership>(
   { timestamps: true }
 );
 
+membershipSchema.index({ user: 1, expiresAt: -1 });
+
 export const Membership = model<IMembership>("Membership", membershipSchema);

@@ -1,6 +1,6 @@
 import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
-import path from "path";
+import helmet from "helmet";
 
 import authRoutes from "./routes/authRoutes";
 import sportsRoutes from "./routes/sportsRoutes";
@@ -14,24 +14,73 @@ import paymentsRoutes from "./routes/paymentsRoutes";
 import membershipRoutes from "./routes/membershipRoutes";
 import rankingsRoutes from "./routes/rankingsRoutes";
 import shopRoutes from "./routes/shopRoutes";
+import challengesRoutes from "./routes/challengesRoutes";
 import { AppError } from "./utils/AppError";
+import { uploadsDir } from "./utils/upload";
+import { getAllowedOrigins, isProduction, isTestPaymentsEnabled } from "./config/env";
+import { isDBConnected } from "./config/db";
+import { apiLimiter, sanitizeBody } from "./middleware/security";
 
 const app = express();
 
+// Render terminates TLS at its proxy; trust one hop so req.ip (used by the
+// rate limiter) is the real client IP, not the proxy's.
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
 app.use(
-  cors({
-    origin: process.env.CLIENT_URL ?? "http://localhost:5173",
-    credentials: true,
+  helmet({
+    // The Vercel frontend (a different origin) must be able to <img> our
+    // /uploads files.
+    crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
+const allowedOrigins = getAllowedOrigins();
+app.use(
+  cors({
+    origin(origin, callback) {
+      // No Origin header: same-origin, curl, Render's health check.
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    maxAge: 600,
+  })
+);
+
+app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: false, limit: "100kb" }));
+app.use(sanitizeBody);
+
+app.use(
+  "/uploads",
+  express.static(uploadsDir, {
+    maxAge: "7d",
+    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+  })
+);
+
+// Health check for Render — no rate limit, reports DB state. Returns 503
+// while Mongo is down so Render can see the instance is unhealthy.
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, service: "the-arena-backend" });
+  const db = isDBConnected();
+  res.status(db ? 200 : 503).json({
+    ok: db,
+    service: "the-arena-backend",
+    db: db ? "connected" : "disconnected",
+    paymentMode: isTestPaymentsEnabled() ? "test" : "disabled",
+    uptimeSeconds: Math.round(process.uptime()),
+  });
 });
 
-// Route mounts are added here as each resource is built.
+app.use("/api", apiLimiter);
+
 app.use("/api/auth", authRoutes);
 app.use("/api/sports", sportsRoutes);
 app.use("/api/teams", teamsRoutes);
@@ -44,31 +93,34 @@ app.use("/api/payments", paymentsRoutes);
 app.use("/api/membership", membershipRoutes);
 app.use("/api/rankings", rankingsRoutes);
 app.use("/api/shop", shopRoutes);
+app.use("/api/challenges", challengesRoutes);
 
 app.use((req, res) => {
-  res.status(404).json({ message: `Not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({ message: `Not found: ${req.method} ${req.path}` });
 });
 
 // Central error handler — every thrown/rejected error lands here and is
-// shaped into the contract's `{ message: string }` error body.
-app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+// shaped into the contract's `{ message: string }` error body. Internal
+// details and stack traces are logged server-side only.
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof AppError) {
     res.status(err.status).json({ message: err.message });
     return;
   }
 
   if (err && err.name === "ValidationError") {
-    res.status(400).json({ message: err.message });
+    const first = err.errors ? (Object.values(err.errors)[0] as any) : null;
+    res.status(400).json({ message: first?.message ?? "Invalid data" });
     return;
   }
 
-  if (err && err.type === "entity.parse.failed") {
-    res.status(400).json({ message: "Malformed JSON body" });
+  if (err && (err.type === "entity.parse.failed" || err.type === "entity.too.large")) {
+    res.status(err.status ?? 400).json({ message: err.type === "entity.too.large" ? "Request body too large" : "Malformed JSON body" });
     return;
   }
 
   if (err && err.name === "CastError") {
-    res.status(400).json({ message: `Invalid id: ${err.value}` });
+    res.status(400).json({ message: "Invalid id" });
     return;
   }
 
@@ -77,12 +129,14 @@ app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     return;
   }
 
-  if (err && (err.name === "MulterError" || err.message === "Only image files are allowed")) {
-    res.status(400).json({ message: err.message });
+  if (err && err.name === "MulterError") {
+    const message = err.code === "LIMIT_FILE_SIZE" ? "Image must be 5 MB or smaller" : err.message;
+    res.status(400).json({ message });
     return;
   }
 
-  console.error("[error]", err);
+  console.error(`[error] ${req.method} ${req.originalUrl}`, isProduction ? err?.message ?? err : err);
+  if (isProduction && err?.stack) console.error(err.stack);
   res.status(500).json({ message: "Internal server error" });
 });
 

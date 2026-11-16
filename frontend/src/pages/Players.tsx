@@ -1,52 +1,50 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Crown, Search, User } from "lucide-react";
-import api from "@/api/axios";
+import { Crown, Search } from "lucide-react";
+import api, { assetUrl } from "@/api/axios";
 import { SPORT_FILTER_OPTIONS, getSportBySlug } from "@/data/sports";
 import type { PlayerSummary } from "@/types";
 import { apiError } from "@/types";
-import Reveal from "@/components/Reveal";
 import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
 import { Input } from "@/components/ui/Field";
 import CustomSelect from "@/components/ui/CustomSelect";
-import { useSpotlight } from "@/hooks/useSpotlight";
+import SportMark, { Initials } from "@/components/ui/SportMark";
+import PageHero from "@/components/page/PageHero";
 
-function PlayerCard({ player, index }: { player: PlayerSummary; index: number }) {
-  const spot = useSpotlight<HTMLAnchorElement>();
+function PlayerCard({ player }: { player: PlayerSummary }) {
+  const sports = player.sportPreferences?.slice(0, 3) ?? [];
 
   return (
-    <Reveal delay={(index % 6) * 0.05}>
-      <Link
-        ref={spot.ref}
-        onMouseMove={spot.onMouseMove}
-        to={`/players/${player.id}`}
-        className="spotlight glass flex h-full flex-col items-center gap-3 rounded-2xl p-6 text-center transition-transform hover:-translate-y-1 hover:border-accent/40"
-      >
+    <Link to={`/players/${player.id}`} className="panel card-lift group flex h-full flex-col overflow-hidden">
+      <div className="relative aspect-[4/5] overflow-hidden bg-surface-2">
         {player.photo ? (
-          <img src={player.photo} alt={player.name} className="h-16 w-16 rounded-full object-cover" />
+          <img src={assetUrl(player.photo)} alt="" loading="lazy" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent">
-            <User className="h-6 w-6" />
-          </div>
+          <Initials name={player.name} className="h-full w-full bg-surface-2 text-6xl text-ink-faint" />
         )}
-        <div>
-          <div className="flex items-center justify-center gap-1.5">
-            <h3 className="font-display text-lg font-semibold text-ink">{player.name}</h3>
-            {player.isPremium && <Crown className="h-3.5 w-3.5 text-premium" />}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-            {player.sportPreferences?.slice(0, 3).map((slug) => {
-              const s = getSportBySlug(slug);
-              return (
-                <span key={slug} className="rounded-full bg-surface-2 px-2.5 py-1 text-xs text-ink-muted">
-                  {s?.emoji} {s?.name ?? slug}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      </Link>
-    </Reveal>
+        {player.isPremium && (
+          <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-base/85 px-2.5 py-1 text-xs font-semibold text-premium">
+            <Crown className="h-3 w-3" /> Premium
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <h3 className="truncate font-display text-xl font-bold text-ink">{player.name}</h3>
+        {sports.length > 0 && (
+          <ul className="mt-auto flex flex-wrap gap-1.5">
+            {sports.map((slug) => (
+              <li
+                key={slug}
+                className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 py-0.5 pl-0.5 pr-2.5 text-xs text-ink-muted"
+              >
+                <SportMark slug={slug} size="xs" className="!rounded-full" />
+                {getSportBySlug(slug)?.name ?? slug}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Link>
   );
 }
 
@@ -81,56 +79,60 @@ export default function Players() {
     setParams(next);
   }
 
+  const activeSport = getSportBySlug(sport);
+
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x">
-        <Reveal>
-          <span className="eyebrow">Players</span>
-        </Reveal>
-        <Reveal delay={0.06}>
-          <h1 className="mt-4 font-display text-4xl font-bold text-ink">Meet the players</h1>
-        </Reveal>
-
-        <Reveal delay={0.12}>
-          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
-            <form
-              className="relative flex-1"
-              onSubmit={(e) => {
-                e.preventDefault();
-                updateParam("search", searchInput);
-              }}
-            >
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
-              <Input
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Search players by name..."
-                className="pl-11"
-              />
-            </form>
-            <CustomSelect
-              value={sport}
-              onChange={(v) => updateParam("sport", v)}
-              options={SPORT_FILTER_OPTIONS}
-              className="sm:w-56"
+    <main className="flex-1">
+      <PageHero
+        title={activeSport ? `${activeSport.name} players` : "Meet the players"}
+        image={activeSport?.image ?? "/sports/tennis.jpg"}
+        imagePosition="center 30%"
+      >
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <form
+            role="search"
+            className="relative flex-1"
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateParam("search", searchInput);
+            }}
+          >
+            <Search className="pointer-events-none absolute left-4 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Search players by name"
+              aria-label="Search players"
+              className="pl-11"
             />
-          </div>
-        </Reveal>
+          </form>
+          <CustomSelect
+            value={sport}
+            onChange={(v) => updateParam("sport", v)}
+            options={SPORT_FILTER_OPTIONS}
+            className="sm:w-60"
+          />
+        </div>
+      </PageHero>
 
-        <div className="mt-10">
-          {loading && <Loading label="Loading players..." />}
-          {!loading && error && <ErrorState message={error} />}
-          {!loading && !error && players.length === 0 && (
-            <EmptyState title="No players found" message="Try a different sport or search term." />
-          )}
-          {!loading && !error && players.length > 0 && (
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-              {players.map((p, i) => (
-                <PlayerCard key={p.id} player={p} index={i} />
+      <div className="container-x py-12 md:py-16">
+        {loading && <Loading label="Loading players…" />}
+        {!loading && error && <ErrorState message={error} />}
+        {!loading && !error && players.length === 0 && (
+          <EmptyState title="No players found" message="Try a different sport or search term." />
+        )}
+        {!loading && !error && players.length > 0 && (
+          <>
+            <p className="mb-6 text-sm text-ink-faint">
+              <span className="num">{players.length}</span> {players.length === 1 ? "player" : "players"}
+            </p>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-[repeat(auto-fill,minmax(min(100%,13rem),1fr))] sm:gap-5">
+              {players.map((p) => (
+                <PlayerCard key={p.id} player={p} />
               ))}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </main>
   );

@@ -1,14 +1,17 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { LogIn, Shield, Upload } from "lucide-react";
+import { ImagePlus, LogIn, Users } from "lucide-react";
 import api from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
-import { SPORTS } from "@/data/sports";
+import { SPORTS, getSportBySlug } from "@/data/sports";
 import { apiError } from "@/types";
-import Reveal from "@/components/Reveal";
-import { Input, Select } from "@/components/ui/Field";
-import Button from "@/components/ui/Button";
+import { Input } from "@/components/ui/Field";
+import Button, { buttonClass } from "@/components/ui/Button";
+import SportPicker from "@/components/page/SportPicker";
+import SportMark from "@/components/ui/SportMark";
+import { FormError } from "@/components/page/AuthShell";
+import GatePanel from "@/components/page/GatePanel";
 
 export default function TeamCreate() {
   const { user } = useAuth();
@@ -47,66 +50,31 @@ export default function TeamCreate() {
 
   if (!user) {
     return (
-      <main className="flex flex-1 items-center justify-center py-24">
-        <Reveal className="glass mx-6 max-w-md rounded-3xl p-8 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-accent-soft text-accent">
-            <LogIn className="h-5 w-5" />
-          </div>
-          <h1 className="mt-5 font-display text-2xl font-bold text-ink">Log in to create a team</h1>
-          <p className="mt-2 text-sm text-ink-muted">
-            You'll need an account to create and manage a team on The Arena.
-          </p>
-          <Link to="/login" state={{ from: "/teams/create" }}>
-            <Button className="mt-6">Log in</Button>
-          </Link>
-        </Reveal>
-      </main>
+      <GatePanel icon={<LogIn className="h-6 w-6" />} title="Log in to create a team">
+        <p className="mt-3 text-ink-muted">You’ll need an account to create and manage a team on The Arena.</p>
+        <Link to="/login" state={{ from: "/teams/create" }} className={buttonClass({ size: "lg", className: "mt-8" })}>
+          Log in
+        </Link>
+      </GatePanel>
     );
   }
 
+  const sportDef = getSportBySlug(sport);
+
   return (
-    <main className="flex-1 py-16">
-      <div className="container-x max-w-xl">
-        <Reveal>
-          <span className="eyebrow">New team</span>
-        </Reveal>
-        <Reveal delay={0.06}>
-          <h1 className="mt-4 font-display text-4xl font-bold text-ink">Create your team</h1>
-          <p className="mt-2 text-sm text-ink-muted">
+    <main className="flex-1">
+      <div className="container-x grid gap-12 py-14 md:py-20 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:gap-16">
+        <div>
+          <h1 className="font-display text-5xl font-bold leading-[0.95] text-ink md:text-6xl">Create your team</h1>
+          <p className="mt-4 text-ink-muted">
             Free accounts can own 1 team. Upgrade to{" "}
-            <Link to="/membership" className="text-premium hover:underline">
+            <Link to="/membership" className="font-semibold text-premium hover:underline">
               Premium
             </Link>{" "}
             for unlimited teams.
           </p>
-        </Reveal>
 
-        <Reveal delay={0.12}>
-          <form onSubmit={onSubmit} className="glass mt-8 flex flex-col gap-5 rounded-3xl p-8">
-            <div className="flex items-center gap-4">
-              <label
-                htmlFor="logo"
-                className="flex h-20 w-20 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-2xl border border-dashed border-border bg-surface-2 text-ink-faint hover:border-accent/50"
-              >
-                {preview ? (
-                  <img src={preview} alt="Logo preview" className="h-full w-full object-cover" />
-                ) : (
-                  <Upload className="h-6 w-6" />
-                )}
-              </label>
-              <div>
-                <p className="text-sm font-medium text-ink">Team logo</p>
-                <p className="text-xs text-ink-faint">Optional. PNG or JPG.</p>
-                <input
-                  id="logo"
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
-                />
-              </div>
-            </div>
-
+          <form onSubmit={onSubmit} className="mt-10 flex flex-col gap-8">
             <Input
               label="Team name"
               required
@@ -115,20 +83,65 @@ export default function TeamCreate() {
               placeholder="e.g. Kathmandu Kings"
             />
 
-            <Select label="Sport" required value={sport} onChange={(e) => setSport(e.target.value)}>
-              {SPORTS.map((s) => (
-                <option key={s.slug} value={s.slug}>
-                  {s.emoji} {s.name}
-                </option>
-              ))}
-            </Select>
+            <SportPicker value={sport} onChange={setSport} />
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
-            <Button type="submit" loading={loading} size="lg">
+            <div className="flex flex-col gap-2">
+              <span className="text-sm font-medium text-ink-muted">Team logo</span>
+              <label
+                htmlFor="logo"
+                className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed border-border bg-base-2 p-4 transition-colors hover:border-accent/50 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-accent"
+              >
+                <span className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-surface text-ink-faint">
+                  {preview ? (
+                    <img src={preview} alt="Logo preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <ImagePlus className="h-6 w-6" />
+                  )}
+                </span>
+                <span>
+                  <span className="block text-sm font-semibold text-ink">{logo ? logo.name : "Upload a logo"}</span>
+                  <span className="block text-sm text-ink-faint">Optional. PNG or JPG.</span>
+                </span>
+                <input
+                  id="logo"
+                  type="file"
+                  accept="image/*"
+                  className="sr-only"
+                  onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+
+            {error && <FormError>{error}</FormError>}
+            <Button type="submit" loading={loading} size="lg" className="self-start">
               Create team
             </Button>
           </form>
-        </Reveal>
+        </div>
+
+        <aside aria-label="Preview" className="lg:sticky lg:top-24 lg:self-start">
+          <p className="mb-3 text-sm text-ink-faint">Preview</p>
+          <div className="panel overflow-hidden">
+            <div className="relative h-40 overflow-hidden bg-surface-2">
+              {sportDef?.image && <img src={sportDef.image} alt="" className="h-full w-full object-cover opacity-60" />}
+              <div className="photo-veil-bottom absolute inset-0" />
+              <span className="absolute right-4 top-4 rounded-full bg-base/80 px-2.5 py-1 text-xs font-medium text-ink-muted">
+                {sportDef?.name}
+              </span>
+            </div>
+            <div className="-mt-10 px-6 pb-6">
+              {preview ? (
+                <img src={preview} alt="" className="relative h-20 w-20 rounded-2xl border-4 border-surface object-cover" />
+              ) : (
+                <SportMark slug={sport} className="relative !h-20 !w-20 border-4 border-surface" />
+              )}
+              <p className="mt-4 truncate font-display text-3xl font-bold text-ink">{name || "Your team name"}</p>
+              <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-muted">
+                <Users className="h-4 w-4 text-ink-faint" /> 1 member, by {user.name}
+              </p>
+            </div>
+          </div>
+        </aside>
       </div>
     </main>
   );

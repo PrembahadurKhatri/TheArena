@@ -7,8 +7,14 @@ import * as ordersService from "../services/ordersService";
 
 export const createOrder = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Authentication required");
-  const { items, shippingAddress, shippingProvince } = req.body;
-  const order = await ordersService.createOrder(req.user, { items, shippingAddress, shippingProvince });
+  const { items, shippingAddress, shippingProvince, contactName, contactPhone } = req.body;
+  const order = await ordersService.createOrder(req.user, {
+    items,
+    shippingAddress,
+    shippingProvince,
+    contactName,
+    contactPhone,
+  });
   res.status(201).json({ order: toOrderSummary(order) });
 });
 
