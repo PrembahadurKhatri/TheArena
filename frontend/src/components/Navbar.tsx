@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from "react";
+﻿import { useEffect, useState, type ComponentType } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
@@ -79,8 +79,8 @@ function Wordmark({ isShop }: { isShop: boolean }) {
           </span>
         )}
       </span>
-      <span className="mt-1 hidden font-display text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-faint sm:block">
-        {isShop ? "Gear for every game" : "Play · Compete · Rise"}
+      <span className="mt-1.5 hidden font-display text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-faint sm:block">
+        {isShop ? "Gear for every game" : "Play Â· Compete Â· Rise"}
       </span>
     </span>
   );
@@ -152,8 +152,8 @@ export default function Navbar() {
         }`}
       />
 
-      <div className="container-x flex h-[72px] items-center justify-between gap-4">
-        <Link to={isShop ? "/shop" : "/"} className="group flex shrink-0 items-center gap-3" onClick={() => setOpen(false)}>
+      <div className="mx-auto flex h-19 w-full max-w-370 items-center justify-between gap-6 px-6 md:px-10 2xl:gap-10">
+        <Link to={isShop ? "/shop" : "/"} className="group flex shrink-0 items-center gap-4" onClick={() => setOpen(false)}>
           <span className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface/80 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]">
             <span className={`absolute inset-0 rounded-xl ${tone.glow} opacity-0 blur-lg transition-opacity duration-300 group-hover:opacity-100`} />
             <img
@@ -168,7 +168,7 @@ export default function Navbar() {
         {/* Desktop rail with a sliding active pill */}
         <nav
           aria-label={isShop ? "Shop" : "Main"}
-          className="hidden items-center gap-0.5 rounded-full border border-border/80 bg-surface/60 p-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] backdrop-blur-xl xl:flex"
+          className="hidden items-center gap-1 rounded-full border border-border/80 bg-surface/60 p-1 shadow-[inset_0_1px_0_rgb(255_255_255/0.04)] backdrop-blur-xl xl:flex"
         >
           {links.map((link) => (
             <NavLink
@@ -176,7 +176,7 @@ export default function Navbar() {
               to={link.to}
               end={link.end}
               className={({ isActive }) =>
-                `group relative flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium transition-colors duration-200 ${
+                `group relative flex items-center gap-2 rounded-full px-3.5 py-2 text-sm 2xl:px-4 font-medium transition-colors duration-200 ${
                   isActive ? tone.active : "text-ink-muted hover:text-ink"
                 }`
               }
@@ -193,7 +193,7 @@ export default function Navbar() {
                     <span className="absolute inset-0 rounded-full bg-surface-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
                   )}
                   <link.icon
-                    className={`relative h-4 w-4 transition-transform duration-200 ${
+                    className={`relative hidden h-4 w-4 transition-transform 2xl:block duration-200 ${
                       isActive ? "" : "opacity-70 group-hover:-translate-y-px group-hover:opacity-100"
                     }`}
                   />
@@ -211,7 +211,7 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <div className="hidden shrink-0 items-center gap-2.5 xl:flex">
+        <div className="hidden shrink-0 items-center gap-3 xl:flex">
           {isShop ? (
             <>
               <Link
