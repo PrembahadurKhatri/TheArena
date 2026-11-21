@@ -16,6 +16,7 @@ import {
   slotStart,
   validateDate,
 } from "./groundBookingsService";
+import { withLock, groundDayLockKey } from "../utils/lock";
 
 const MAX_MATCH_HOURS = 12;
 
@@ -263,32 +264,39 @@ export async function acceptChallenge(user: IUser, id: string, input: { teamId?:
     }
   }
 
-  if (challenge.ground) {
-    const clash = await findGroundClash({
-      groundId: idOf(challenge.ground)!,
-      date: challenge.date,
-      startTime: challenge.startTime,
-      endTime: challenge.endTime,
-      excludeChallengeId: challenge._id,
-    });
-    if (clash) {
-      throw new AppError(409, `The ground has been taken from ${clash.startTime} to ${clash.endTime}. Ask the challenger to change it.`);
+  const takeChallenge = async () => {
+    if (challenge.ground) {
+      const clash = await findGroundClash({
+        groundId: idOf(challenge.ground)!,
+        date: challenge.date,
+        startTime: challenge.startTime,
+        endTime: challenge.endTime,
+        excludeChallengeId: challenge._id,
+      });
+      if (clash) {
+        throw new AppError(409, `The ground has been taken from ${clash.startTime} to ${clash.endTime}. Ask the challenger to change it.`);
+      }
     }
-  }
 
-  // Atomic on status so two people can't both take an open challenge.
-  const updated = await Challenge.findOneAndUpdate(
-    { _id: challenge._id, status: challenge.status },
-    {
-      $set: {
-        status: "accepted",
-        acceptedBy: user._id,
-        acceptedTeam: acceptedTeam ? acceptedTeam._id : null,
-        respondedAt: new Date(),
+    // Atomic on status so two people can't both take an open challenge.
+    return Challenge.findOneAndUpdate(
+      { _id: challenge._id, status: challenge.status },
+      {
+        $set: {
+          status: "accepted",
+          acceptedBy: user._id,
+          acceptedTeam: acceptedTeam ? acceptedTeam._id : null,
+          respondedAt: new Date(),
+        },
       },
-    },
-    { new: true }
-  );
+      { new: true }
+    );
+  };
+  // With a ground, the clash check and the accept run under the same lock as
+  // ground bookings, so a booking and an accepted match can't claim one slot.
+  const updated = challenge.ground
+    ? await withLock(groundDayLockKey(idOf(challenge.ground), challenge.date), takeChallenge)
+    : await takeChallenge();
   if (!updated) throw new AppError(409, "Someone else just took this challenge");
   return getChallengeById(id);
 }

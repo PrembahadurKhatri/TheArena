@@ -87,7 +87,7 @@ function Wordmark({ isShop }: { isShop: boolean }) {
 }
 
 export default function Navbar() {
-  const { user, logout } = useAuth();
+  const { user, logout, logoutAll } = useAuth();
   const { itemCount, openDrawer } = useCart();
   const { pathname } = useLocation();
   const isShop = pathname === "/shop" || pathname.startsWith("/shop/");
@@ -114,6 +114,13 @@ export default function Navbar() {
     logout();
     setMenuOpen(false);
     navigate("/");
+  }
+
+  async function handleLogoutAll() {
+    if (!window.confirm("Sign out of The Arena on every device, including this one?")) return;
+    setMenuOpen(false);
+    await logoutAll().catch(() => undefined);
+    navigate("/login");
   }
 
   // Tone: blue for the Arena, gold for the Shop.
@@ -295,6 +302,12 @@ export default function Navbar() {
                     >
                       <LogOut className="h-4 w-4" /> Logout
                     </button>
+                    <button
+                      onClick={handleLogoutAll}
+                      className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-xs text-ink-muted transition-colors hover:bg-danger/10 hover:text-danger"
+                    >
+                      <LogOut className="h-3.5 w-3.5 opacity-70" /> Log out of all devices
+                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -410,6 +423,13 @@ export default function Navbar() {
                     >
                       <LogOut className="h-4 w-4" />
                       Logout
+                    </button>
+                    <button
+                      onClick={handleLogoutAll}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2 text-left text-xs text-ink-muted hover:bg-danger/10 hover:text-danger"
+                    >
+                      <LogOut className="h-3.5 w-3.5 opacity-70" />
+                      Log out of all devices
                     </button>
                   </>
                 ) : (

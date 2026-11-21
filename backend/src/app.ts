@@ -15,6 +15,8 @@ import membershipRoutes from "./routes/membershipRoutes";
 import rankingsRoutes from "./routes/rankingsRoutes";
 import shopRoutes from "./routes/shopRoutes";
 import challengesRoutes from "./routes/challengesRoutes";
+import adminRoutes from "./routes/adminRoutes";
+import { requestContext, getRequestContext } from "./middleware/requestContext";
 import { AppError } from "./utils/AppError";
 import { uploadsDir } from "./utils/upload";
 import { getAllowedOrigins, isProduction, isTestPaymentsEnabled } from "./config/env";
@@ -27,6 +29,7 @@ const app = express();
 // rate limiter) is the real client IP, not the proxy's.
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
+app.use(requestContext);
 
 app.use(
   helmet({
@@ -94,6 +97,7 @@ app.use("/api/membership", membershipRoutes);
 app.use("/api/rankings", rankingsRoutes);
 app.use("/api/shop", shopRoutes);
 app.use("/api/challenges", challengesRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: `Not found: ${req.method} ${req.path}` });
@@ -135,7 +139,8 @@ app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     return;
   }
 
-  console.error(`[error] ${req.method} ${req.originalUrl}`, isProduction ? err?.message ?? err : err);
+  const requestId = getRequestContext()?.requestId;
+  console.error(`[error] ${req.method} ${req.originalUrl} requestId=${requestId}`, isProduction ? err?.message ?? err : err);
   if (isProduction && err?.stack) console.error(err.stack);
   res.status(500).json({ message: "Internal server error" });
 });

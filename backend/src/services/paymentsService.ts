@@ -9,6 +9,8 @@ import { isObjectIdString } from "../utils/validation";
 import { isTestPaymentsEnabled } from "../config/env";
 import { cancelOrderAndRestock } from "./ordersService";
 import { findBookingConflict } from "./groundBookingsService";
+import { withLock, groundDayLockKey } from "../utils/lock";
+import { audit } from "./auditService";
 
 const PLAN_DURATIONS_MS: Record<MembershipPlan, number> = {
   monthly: 30 * 24 * 60 * 60 * 1000,
@@ -197,6 +199,16 @@ async function assertFulfillable(payment: IPayment) {
   }
 }
 
+// Ground-booking payments re-check the slot and confirm it under the same
+// per-ground-per-day lock as new bookings, so two overlapping holds can't
+// both be confirmed at the same moment.
+async function exclusiveForPayment<T>(payment: IPayment, fn: () => Promise<T>): Promise<T> {
+  if (payment.type !== "ground_booking") return fn();
+  const booking = await GroundBooking.findById(payment.refId).select("ground date");
+  if (!booking) return fn();
+  return withLock(groundDayLockKey(booking.ground, booking.date), fn);
+}
+
 export async function confirm(paymentId: string, user: IUser) {
   const payment = await getOwnedPaymentOrThrow(paymentId, user);
   if (payment.status !== "pending") {
@@ -205,6 +217,17 @@ export async function confirm(paymentId: string, user: IUser) {
 
   await verifyWithGateway(payment);
 
+  const updated = await exclusiveForPayment(payment, () => confirmVerified(paymentId, payment, user));
+  await audit({
+    actor: user._id,
+    action: "payment.confirmed",
+    target: { type: "payment", id: updated._id },
+    after: { type: updated.type, amount: updated.amount, provider: updated.provider },
+  });
+  return updated;
+}
+
+async function confirmVerified(paymentId: string, payment: IPayment, user: IUser) {
   try {
     await assertFulfillable(payment);
   } catch (err) {

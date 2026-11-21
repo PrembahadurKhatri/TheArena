@@ -2,6 +2,7 @@ import { Store } from "../models/Store";
 import { Product } from "../models/Product";
 import { IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
+import { requireString, optionalString } from "../utils/validation";
 
 const STORE_OWNER_POPULATE = { path: "owner", select: "name" };
 
@@ -38,8 +39,9 @@ export async function getMyStore(userId: string) {
 }
 
 export async function createStore(user: IUser, input: { name?: string; description?: string; logo?: string | null }) {
-  const { name, description, logo } = input;
-  if (!name) throw new AppError(400, "name is required");
+  const name = requireString(input.name, "name", { min: 2, max: 80 });
+  const description = optionalString(input.description, "description", 2000);
+  const { logo } = input;
 
   const existing = await Store.findOne({ owner: user._id });
   if (existing) {
@@ -71,8 +73,8 @@ export async function updateStore(
   updates: { name?: string; description?: string; logo?: string }
 ) {
   const store = await getOwnedStoreOrThrow(storeId, user._id.toString());
-  if (updates.name !== undefined) store.name = updates.name;
-  if (updates.description !== undefined) store.description = updates.description;
+  if (updates.name !== undefined) store.name = requireString(updates.name, "name", { min: 2, max: 80 });
+  if (updates.description !== undefined) store.description = optionalString(updates.description, "description", 2000);
   if (updates.logo !== undefined) store.logo = updates.logo;
   await store.save();
   return getStoreWithProducts(store._id.toString());

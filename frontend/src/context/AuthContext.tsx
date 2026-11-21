@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import api from "@/api/axios";
+import api, { SESSION_ENDED_EVENT } from "@/api/axios";
 
 export interface ArenaUser {
   id: string;
@@ -28,6 +28,8 @@ interface AuthContextValue {
     province?: string;
   }) => Promise<void>;
   logout: () => void;
+  /** Revoke every session of this account (all devices), then sign out here. */
+  logoutAll: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
 
@@ -60,6 +62,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The API client signals when the server ended this session.
+  useEffect(() => {
+    const onEnded = () => setUser(null);
+    window.addEventListener(SESSION_ENDED_EVENT, onEnded);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onEnded);
+  }, []);
+
   async function login(email: string, password: string) {
     const { data } = await api.post("/auth/login", { email, password });
     localStorage.setItem("arena_token", data.token);
@@ -84,8 +93,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function logoutAll() {
+    try {
+      await api.post("/auth/logout-all");
+    } finally {
+      logout();
+    }
+  }
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, refreshUser }),
+    () => ({ user, loading, login, register, logout, logoutAll, refreshUser }),
     [user, loading]
   );
 

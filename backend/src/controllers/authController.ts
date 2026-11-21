@@ -27,6 +27,9 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Authentication required");
 
   const updates: any = { ...req.body };
+  // The photo can only come from an uploaded (validated) file, never from a
+  // URL in the body.
+  delete updates.photo;
   if (req.file) {
     updates.photo = fileUrl(req.file);
   }
@@ -43,6 +46,11 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
 
   const user = await authService.updateMe(req.user, updates);
   res.status(200).json({ user: toUserJSON(user) });
+});
+
+export const logoutAll = asyncHandler(async (req: Request, res: Response) => {
+  if (!req.user) throw new AppError(401, "Authentication required");
+  res.status(200).json(await authService.logoutAllDevices(req.user));
 });
 
 export const forgotPassword = asyncHandler(async (req: Request, res: Response) => {

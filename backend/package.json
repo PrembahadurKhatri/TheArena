@@ -9,7 +9,13 @@
     "start": "node dist/server.js",
     "seed": "ts-node-dev --transpile-only src/seed.ts",
     "seed:prod": "node dist/seed.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tests/tsconfig.json",
+    "create-admin": "ts-node-dev --transpile-only src/scripts/createAdmin.ts",
+    "create-admin:prod": "node dist/scripts/createAdmin.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "migrate:phase2": "ts-node-dev --transpile-only src/scripts/migratePhase2.ts",
+    "migrate:phase2:prod": "node dist/scripts/migratePhase2.js"
   },
   "dependencies": {
     "bcrypt": "^6.0.0",
@@ -32,8 +38,12 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.9.0",
     "@types/nodemailer": "^6.4.16",
+    "@types/supertest": "^6.0.3",
+    "mongodb-memory-server": "^10.4.3",
+    "supertest": "^7.3.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.12"
   },
   "engines": {
     "node": ">=20"

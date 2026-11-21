@@ -4,6 +4,7 @@ import { Ground } from "../models/Ground";
 import { IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
 import { isObjectIdString } from "../utils/validation";
+import { withLock, groundDayLockKey } from "../utils/lock";
 
 const PREMIUM_DISCOUNT = 0.1;
 
@@ -105,14 +106,6 @@ export async function createBooking(
     throw new AppError(400, `Bookings can be made at most ${MAX_DAYS_AHEAD} days ahead`);
   }
 
-  const conflict = await findBookingConflict({ groundId: ground._id, date, startTime, endTime });
-  if (conflict) {
-    throw new AppError(
-      409,
-      `This ground is already booked from ${conflict.startTime} to ${conflict.endTime} on ${date}. Please choose another time.`
-    );
-  }
-
   // Price is always computed here from the ground's stored rate. The
   // premium discount applies only while membership is active (verifyToken
   // has already downgraded expired memberships).
@@ -122,15 +115,26 @@ export async function createBooking(
   }
   totalAmount = Math.round(totalAmount * 100) / 100;
 
-  const booking = await GroundBooking.create({
-    ground: ground._id,
-    user: user._id,
-    date,
-    startTime,
-    endTime,
-    totalAmount,
-    status: "pending_payment",
-    payment: null,
+  // Check-then-insert under a per-ground-per-day lock: without it, two
+  // requests for the same slot at the same moment could both find it free.
+  const booking = await withLock(groundDayLockKey(ground._id, date), async () => {
+    const conflict = await findBookingConflict({ groundId: ground._id, date, startTime, endTime });
+    if (conflict) {
+      throw new AppError(
+        409,
+        `This ground is already booked from ${conflict.startTime} to ${conflict.endTime} on ${date}. Please choose another time.`
+      );
+    }
+    return GroundBooking.create({
+      ground: ground._id,
+      user: user._id,
+      date,
+      startTime,
+      endTime,
+      totalAmount,
+      status: "pending_payment",
+      payment: null,
+    });
   });
 
   return GroundBooking.findById(booking._id).populate("ground");

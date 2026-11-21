@@ -1,9 +1,13 @@
 import jwt from "jsonwebtoken";
 import { Types } from "mongoose";
+import type { UserRole } from "../models/User";
 
 export interface JwtPayload {
   id: string;
-  role: "player" | "admin";
+  role: UserRole;
+  // Session version (User.tokenVersion) at the time the token was issued.
+  // Tokens from before this claim existed have none and count as version 0.
+  v?: number;
 }
 
 function getSecret(): string {
@@ -14,9 +18,10 @@ function getSecret(): string {
   return secret;
 }
 
-export function signToken(userId: Types.ObjectId | string, role: "player" | "admin"): string {
+export function signToken(user: { _id: Types.ObjectId | string; role: UserRole; tokenVersion?: number }): string {
   const expiresIn = (process.env.JWT_EXPIRES_IN || "7d") as jwt.SignOptions["expiresIn"];
-  return jwt.sign({ id: userId.toString(), role }, getSecret(), { expiresIn, algorithm: "HS256" });
+  const payload: JwtPayload = { id: user._id.toString(), role: user.role, v: user.tokenVersion ?? 0 };
+  return jwt.sign(payload, getSecret(), { expiresIn, algorithm: "HS256" });
 }
 
 export function verifyJwt(token: string): JwtPayload {

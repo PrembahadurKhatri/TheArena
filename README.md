@@ -40,6 +40,13 @@ npm run dev
 
 The Vite dev server proxies `/api` and `/uploads` to the backend on `localhost:5050` — see `frontend/vite.config.ts`.
 
+## Admin, tests and maintenance
+
+- **First admin:** `cd backend && ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='long passphrase' ADMIN_NAME='Your Name' npm run create-admin` (production: `npm run build` then `npm run create-admin:prod` with `MONGO_URI` set). Creates the account, or promotes an existing one. Passwords come from the environment only.
+- **Tests:** `cd backend && npm test` — runs against an in-memory MongoDB, never your real database. `npm run typecheck` checks source and tests.
+- **Phase 2 backfill** (safe, additive, repeatable): `npm run migrate:phase2 -- --dry-run` to see counts, then without `--dry-run`.
+- **Audit:** see [`docs/AUDIT.md`](./docs/AUDIT.md) for the security audit and what each phase fixed.
+
 ## Deployment
 
 - **Backend → Render** (Web Service). Root Directory `backend`, Build `npm ci --include=dev && npm run build`, Start `npm start`, Health Check `/api/health`. Environment variables are documented in `backend/.env.example`; `render.yaml` is an optional Blueprint with the same settings.

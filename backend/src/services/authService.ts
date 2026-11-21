@@ -8,8 +8,24 @@ import { isValidSportSlug } from "../utils/sports";
 import { isValidProvince } from "../utils/provinces";
 import { getPrimaryClientUrl } from "../config/env";
 import { requireEmail, requireNewPassword, requireString, optionalString } from "../utils/validation";
+import { audit } from "./auditService";
 
-const SALT_ROUNDS = 10;
+// bcrypt cost for new and changed passwords. Hashes made with the old cost
+// (10) still verify; they're upgraded on the user's next successful login.
+const SALT_ROUNDS = 12;
+
+// Compared against when the email doesn't exist, so a login attempt takes
+// the same time either way and can't be used to discover registered emails.
+const DUMMY_HASH = bcrypt.hashSync("arena-timing-equaliser", SALT_ROUNDS);
+
+function blockedError(status: string) {
+  return new AppError(
+    403,
+    status === "banned"
+      ? "This account has been banned. Contact support if you think this is a mistake."
+      : "This account is suspended. Contact support for help."
+  );
+}
 
 // Reset tokens are emailed in plain form but stored only as a SHA-256 hash,
 // so a database leak doesn't hand out working reset links.
@@ -50,7 +66,7 @@ export async function registerUser(input: {
     province,
   });
 
-  const token = signToken(user._id, user.role);
+  const token = signToken(user);
   return { token, user };
 }
 
@@ -60,18 +76,37 @@ export async function loginUser(input: { email: string; password: string }) {
     throw new AppError(400, "email and password are required");
   }
 
-  const user = await User.findOne({ email: email.trim().toLowerCase() }).select("+passwordHash");
-  if (!user) {
+  if (password.length > 128) throw new AppError(401, "Invalid email or password");
+
+  const user = await User.findOne({ email: email.trim().toLowerCase() }).select("+passwordHash +tokenVersion");
+  const match = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !match) {
     throw new AppError(401, "Invalid email or password");
   }
+  // Checked only after the password, so the response doesn't reveal the
+  // status of accounts the caller can't log into anyway.
+  if (user.status !== "active") throw blockedError(user.status);
 
-  const match = await bcrypt.compare(password, user.passwordHash);
-  if (!match) {
-    throw new AppError(401, "Invalid email or password");
+  // Upgrade old, cheaper hashes now that we have the plain password.
+  if (bcrypt.getRounds(user.passwordHash) < SALT_ROUNDS) {
+    user.passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+  }
+  user.lastLoginAt = new Date();
+  await user.save();
+
+  if (user.role === "admin") {
+    await audit({ actor: user._id, actorRole: user.role, action: "auth.admin_login", target: { type: "user", id: user._id } });
   }
 
-  const token = signToken(user._id, user.role);
+  const token = signToken(user);
   return { token, user };
+}
+
+/** Sign out every session of this user, on every device. */
+export async function logoutAllDevices(user: IUser) {
+  await User.updateOne({ _id: user._id }, { $inc: { tokenVersion: 1 } });
+  await audit({ actor: user._id, actorRole: user.role, action: "auth.logout_all", target: { type: "user", id: user._id } });
+  return { message: "Signed out of all devices" };
 }
 
 export async function updateMe(
@@ -154,6 +189,10 @@ export async function resetPassword(token: string, password: string) {
   user.resetPasswordToken = null;
   user.resetPasswordExpires = null;
   await user.save();
+  // A reset usually means the old password may be known to someone else:
+  // sign out every existing session.
+  await User.updateOne({ _id: user._id }, { $inc: { tokenVersion: 1 } });
+  await audit({ actor: user._id, actorRole: user.role, action: "auth.password_reset", target: { type: "user", id: user._id } });
 
   return { message: "Password has been reset successfully" };
 }
