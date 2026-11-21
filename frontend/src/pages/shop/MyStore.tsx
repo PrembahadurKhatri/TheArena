@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import api, { assetUrl } from "@/api/axios";
+import { compressImage } from "@/api/images";
 import type { OrderSummary, ProductDetail, ProductSummary, StoreDetail } from "@/types";
 import { apiError } from "@/types";
 import { SHOP_CATEGORY_OPTIONS } from "@/data/shopCategories";
@@ -107,7 +108,7 @@ function CreateStoreForm({ onCreated }: { onCreated: (store: StoreDetail) => voi
       const form = new FormData();
       form.append("name", name);
       if (description) form.append("description", description);
-      if (logo) form.append("logo", logo);
+      if (logo) form.append("logo", await compressImage(logo));
       const { data } = await api.post("/shop/stores", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -426,7 +427,7 @@ function EditStoreForm({
       const form = new FormData();
       form.append("name", name);
       form.append("description", description);
-      if (logo) form.append("logo", logo);
+      if (logo) form.append("logo", await compressImage(logo));
       const { data } = await api.patch(`/shop/stores/${store.id}`, form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
@@ -515,7 +516,7 @@ function ProductForm({
       if (form.sport) data.append("sport", form.sport);
       data.append("price", form.price);
       data.append("stock", form.stock);
-      images.forEach((file) => data.append("images", file));
+      for (const file of await Promise.all(images.map(compressImage))) data.append("images", file);
 
       const res = product
         ? await api.patch(`/shop/products/${product.id}`, data, {

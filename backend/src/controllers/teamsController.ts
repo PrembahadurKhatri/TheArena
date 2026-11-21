@@ -3,7 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { param } from "../utils/params";
 import { toTeamSummary, toTeamDetail } from "../utils/shapers";
-import { fileToUrlPath } from "../utils/upload";
+import { fileUrl } from "../utils/upload";
 import * as teamsService from "../services/teamsService";
 
 export const listTeams = asyncHandler(async (req: Request, res: Response) => {
@@ -27,7 +27,7 @@ export const getTeam = asyncHandler(async (req: Request, res: Response) => {
 export const createTeam = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Authentication required");
   const { name, sport } = req.body;
-  const logo = req.file ? fileToUrlPath(req.file.filename) : undefined;
+  const logo = req.file ? fileUrl(req.file) : undefined;
   const team = await teamsService.createTeam(req.user, { name, sport, logo });
   res.status(201).json({ team: toTeamDetail(team, true) });
 });
@@ -35,7 +35,7 @@ export const createTeam = asyncHandler(async (req: Request, res: Response) => {
 export const updateTeam = asyncHandler(async (req: Request, res: Response) => {
   if (!req.user) throw new AppError(401, "Authentication required");
   const { name, sport } = req.body;
-  const logo = req.file ? fileToUrlPath(req.file.filename) : undefined;
+  const logo = req.file ? fileUrl(req.file) : undefined;
   const team = await teamsService.updateTeam(param(req, "id"), req.user, { name, sport, logo });
   res.status(200).json({ team: toTeamDetail(team, true) });
 });

@@ -3,7 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { param } from "../utils/params";
 import { toUserJSON } from "../utils/shapers";
-import { fileToUrlPath } from "../utils/upload";
+import { fileUrl } from "../utils/upload";
 import * as authService from "../services/authService";
 
 export const register = asyncHandler(async (req: Request, res: Response) => {
@@ -28,7 +28,7 @@ export const updateMe = asyncHandler(async (req: Request, res: Response) => {
 
   const updates: any = { ...req.body };
   if (req.file) {
-    updates.photo = fileToUrlPath(req.file.filename);
+    updates.photo = fileUrl(req.file);
   }
   if (typeof updates.sportPreferences === "string") {
     // multipart form fields arrive as strings; support both a single value

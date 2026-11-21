@@ -3,7 +3,7 @@ import { asyncHandler } from "../utils/asyncHandler";
 import { AppError } from "../utils/AppError";
 import { param } from "../utils/params";
 import { toProductDetail } from "../utils/shapers";
-import { fileToUrlPath } from "../utils/upload";
+import { fileUrl } from "../utils/upload";
 import * as productsService from "../services/productsService";
 
 export const listProducts = asyncHandler(async (req: Request, res: Response) => {
@@ -38,7 +38,7 @@ export const getProduct = asyncHandler(async (req: Request, res: Response) => {
 function extractImages(req: Request): string[] | undefined {
   const files = req.files as Express.Multer.File[] | undefined;
   if (!files || files.length === 0) return undefined;
-  return files.map((f) => fileToUrlPath(f.filename));
+  return files.map((f) => fileUrl(f));
 }
 
 export const createProduct = asyncHandler(async (req: Request, res: Response) => {

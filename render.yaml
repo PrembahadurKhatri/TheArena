@@ -27,6 +27,13 @@ services:
         sync: false
       - key: PAYMENT_MODE
         sync: false
+      # Image uploads (required in production: Render's disk is wiped on deploy).
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
       - key: MEMBERSHIP_MONTHLY_PRICE
         value: "299"
       - key: MEMBERSHIP_YEARLY_PRICE

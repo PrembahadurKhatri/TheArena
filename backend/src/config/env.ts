@@ -19,6 +19,14 @@ export function validateEnv() {
     if (getAllowedOrigins().length === 0) {
       throw new Error("CLIENT_URL must be set in production (your Vercel frontend URL)");
     }
+
+    // Render's filesystem is wiped on every deploy/restart, so in production
+    // images must go to Cloudinary — unless a persistent disk is mounted and
+    // UPLOADS_DIR points at it.
+    const missingCloud = ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"].filter((k) => !process.env[k]);
+    if (missingCloud.length > 0 && !process.env.UPLOADS_DIR) {
+      throw new Error(`Missing required environment variables in production: ${missingCloud.join(", ")} (or set UPLOADS_DIR to a persistent disk)`);
+    }
   }
 }
 

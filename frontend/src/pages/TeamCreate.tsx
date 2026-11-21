@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ImagePlus, LogIn, Users } from "lucide-react";
 import api from "@/api/axios";
+import { compressImage } from "@/api/images";
 import { useAuth } from "@/context/AuthContext";
 import { SPORTS, getSportBySlug } from "@/data/sports";
 import { apiError } from "@/types";
@@ -36,7 +37,7 @@ export default function TeamCreate() {
       const form = new FormData();
       form.append("name", name);
       form.append("sport", sport);
-      if (logo) form.append("logo", logo);
+      if (logo) form.append("logo", await compressImage(logo));
       const { data } = await api.post("/teams", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
