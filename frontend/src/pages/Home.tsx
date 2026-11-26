@@ -21,7 +21,9 @@ const STAT_DEFS = [
 export default function Home() {
   const [videoOpen, setVideoOpen] = useState(false);
   const { data: stats } = useApi<SiteStats>("/meta/stats");
-  const STATS = STAT_DEFS.map((d) => ({ ...d, value: stats ? stats[d.key].toLocaleString() : "–" }));
+  // Never let a bad or missing response break the page: show a dash instead.
+  const count = (k: keyof SiteStats) => (typeof stats?.[k] === "number" ? stats[k] : null);
+  const STATS = STAT_DEFS.map((d) => ({ ...d, value: count(d.key)?.toLocaleString() ?? "–" }));
   const featuredSport = SPORTS.find((s) => s.slug === "football") ?? SPORTS[0];
   const otherSports = SPORTS.filter((s) => s.slug !== featuredSport.slug);
 
@@ -48,7 +50,7 @@ export default function Home() {
             </Reveal>
             <Reveal delay={0.16}>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
-                The Arena brings teams, tournaments, grounds and challenges together across {stats?.sports ?? SPORTS.length} sports — cricket to
+                The Arena brings teams, tournaments, grounds and challenges together across {count("sports") || SPORTS.length} sports — cricket to
                 kabaddi — in one premium platform built for players who take the game seriously.
               </p>
             </Reveal>
