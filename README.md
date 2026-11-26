@@ -31,6 +31,8 @@ cd backend
 cp .env.example .env   # fill in MONGO_URI, JWT_SECRET, etc.
 npm install
 npm run seed            # seeds the 10 sports + sample grounds (+ a demo shop in development)
+npm run seed:demo       # optional: fake players, teams, tournament, ground owner, shop, staff + Super Admin
+                        # (all @demo.thearena.test, password ArenaDemo#2026; remove with: npm run seed:demo -- --remove)
 npm run dev
 ```
 
