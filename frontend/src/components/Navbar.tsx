@@ -9,9 +9,12 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
-  Medal,
   Menu,
   Package,
+  Bell,
+  CalendarDays,
+  Settings as SettingsIcon,
+  ShieldCheck,
   ShoppingBag,
   Sparkles,
   Store,
@@ -26,6 +29,7 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { assetUrl } from "@/api/axios";
+import NotificationBell from "@/components/NotificationBell";
 
 type IconType = ComponentType<{ className?: string }>;
 type NavItem = { to: string; label: string; icon: IconType; end?: boolean };
@@ -33,10 +37,10 @@ type NavItem = { to: string; label: string; icon: IconType; end?: boolean };
 const NAV_LINKS: NavItem[] = [
   { to: "/teams", label: "Teams", icon: Users },
   { to: "/players", label: "Players", icon: UserRound },
+  { to: "/matches", label: "Matches", icon: CalendarDays },
   { to: "/challenges", label: "Challenges", icon: Swords },
   { to: "/tournaments", label: "Tournaments", icon: Trophy },
   { to: "/grounds", label: "Grounds", icon: MapPin },
-  { to: "/rankings", label: "Rankings", icon: Medal },
 ];
 
 // On /shop routes the navbar becomes the shop's own navigation, in gold.
@@ -243,6 +247,7 @@ export default function Navbar() {
             </a>
           )}
 
+          {user && <NotificationBell />}
           {user ? (
             <div className="relative">
               <button
@@ -283,7 +288,12 @@ export default function Navbar() {
                     {[
                       { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
                       { to: "/team-dashboard", label: "Team Dashboard", icon: Users },
+                      { to: "/matches?tab=mine", label: "My matches", icon: CalendarDays },
                       { to: "/shop/orders", label: "My orders", icon: Package },
+                      { to: "/owner", label: "My grounds", icon: MapPin },
+                      { to: "/notifications", label: "Notifications", icon: Bell },
+                      { to: "/settings", label: "Settings", icon: SettingsIcon },
+                      ...(user.role === "admin" ? [{ to: "/admin", label: "Admin console", icon: ShieldCheck }] : []),
                     ].map((item) => (
                       <Link
                         key={item.to}
@@ -333,6 +343,7 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-2 xl:hidden">
+          {user && <NotificationBell />}
           {isShop && <CartButton count={itemCount} onClick={openDrawer} />}
           <button
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface/70 text-ink transition-colors hover:border-accent/40 hover:bg-surface-2"
@@ -417,6 +428,24 @@ export default function Navbar() {
                       Dashboard
                       {user.isPremium && <Crown className="h-3.5 w-3.5 text-premium" />}
                     </Link>
+                    <Link
+                      to="/settings"
+                      onClick={() => setOpen(false)}
+                      className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-ink hover:bg-surface"
+                    >
+                      <SettingsIcon className="h-4 w-4" />
+                      Settings
+                    </Link>
+                    {user.role === "admin" && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setOpen(false)}
+                        className="flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-ink hover:bg-surface"
+                      >
+                        <ShieldCheck className="h-4 w-4" />
+                        Admin console
+                      </Link>
+                    )}
                     <button
                       onClick={handleLogout}
                       className="flex items-center gap-3 rounded-xl px-3 py-3 text-left text-sm font-medium text-danger hover:bg-danger/10"

@@ -20,7 +20,6 @@ type Step = "details" | "payment" | "success" | "failed";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "details", label: "Delivery" },
-  { key: "payment", label: "Payment" },
   { key: "success", label: "Confirmation" },
 ];
 
@@ -101,20 +100,19 @@ export default function Checkout() {
     setError("");
     setBusy(true);
     try {
+      // Cash on delivery: online payment is on hold until a gateway
+      // (Khalti / eSewa) is connected. Each shop delivers and collects its part.
       const { data: orderRes } = await api.post("/shop/orders", {
-        items: buyable.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+        items: buyable.map((i) => ({ productId: i.productId, variantId: i.variantId ?? undefined, quantity: i.quantity })),
         shippingAddress: `${form.address.trim()}, ${form.city.trim()}`,
         shippingProvince: form.province || undefined,
         contactName: form.name.trim(),
         contactPhone: form.phone.trim(),
-      });
-      const { data: paymentRes } = await api.post("/payments/checkout", {
-        type: "shop_order",
-        refId: orderRes.order.id,
+        paymentMethod: "cod",
       });
       setOrder(orderRes.order);
-      setPayment(paymentRes.payment);
-      setStep("payment");
+      clearCart();
+      setStep("success");
       window.scrollTo({ top: 0 });
     } catch (err) {
       setError(apiError(err, "Could not place your order."));
@@ -188,8 +186,8 @@ export default function Checkout() {
             <h1 className="mt-6 font-display text-5xl font-bold text-ink md:text-6xl">Order confirmed</h1>
             <p className="mt-3 text-lg text-ink-muted">
               Thanks, {form.name.split(" ")[0]}. Order{" "}
-              <span className="num font-semibold text-ink">#{order.id.slice(-6).toUpperCase()}</span> is paid and on
-              its way to the seller.
+              <span className="num font-semibold text-ink">#{order.id.slice(-6).toUpperCase()}</span> is with the seller.
+              Pay in cash when it’s delivered. Track it under My orders.
             </p>
           </div>
 
@@ -339,7 +337,7 @@ export default function Checkout() {
                     Edit cart
                   </Link>
                   <Button type="submit" size="lg" loading={busy} icon={<Lock className="h-4 w-4" />}>
-                    Continue to payment
+                    Place order (cash on delivery)
                   </Button>
                 </div>
               </form>

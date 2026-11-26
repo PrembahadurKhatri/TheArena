@@ -7,7 +7,9 @@ import { useAuth } from "@/context/AuthContext";
 import { SPORTS, getSportBySlug } from "@/data/sports";
 import { PROVINCE_OPTIONS } from "@/data/provinces";
 import { apiError } from "@/types";
-import { Input, Textarea } from "@/components/ui/Field";
+import { Input, Select, Textarea } from "@/components/ui/Field";
+import { compressImage } from "@/api/images";
+import { districtOptions } from "@/data/locations";
 import CustomSelect from "@/components/ui/CustomSelect";
 import Button, { buttonClass } from "@/components/ui/Button";
 import SportPicker from "@/components/page/SportPicker";
@@ -15,7 +17,15 @@ import GatePanel from "@/components/page/GatePanel";
 import { Segmented } from "@/components/page/PageHero";
 import { FormError } from "@/components/page/AuthShell";
 
-const TEAM_SIZES = ["4", "8", "16", "32"] as const;
+const TEAM_SIZES = ["4", "6", "8", "12", "16", "32"] as const;
+
+const FORMATS = [
+  { value: "knockout", label: "Knockout", hint: "Lose once and you're out. Byes go to the top seeds." },
+  { value: "round_robin", label: "Round robin", hint: "Everyone plays everyone once; best record wins." },
+  { value: "league", label: "League", hint: "Everyone plays everyone home and away." },
+  { value: "group_stage", label: "Group stage", hint: "Round robin inside groups." },
+  { value: "group_knockout", label: "Groups + knockout", hint: "Groups first, then the top teams play a knockout." },
+];
 
 export default function TournamentCreate() {
   const { user } = useAuth();
@@ -27,8 +37,19 @@ export default function TournamentCreate() {
     startDate: "",
     description: "",
     province: user?.province ?? "",
+    district: user?.district ?? "",
     location: "",
+    format: "knockout",
+    minTeams: "4",
+    groups: "2",
+    advancePerGroup: "2",
+    registrationClosesAt: "",
+    endDate: "",
+    entryFee: "0",
+    prizes: "",
+    rules: "",
   });
+  const [poster, setPoster] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -45,16 +66,15 @@ export default function TournamentCreate() {
     setError("");
     setLoading(true);
     try {
-      const { data } = await api.post("/tournaments", {
-        name: form.name,
-        sport: form.sport,
-        maxTeams: Number(form.maxTeams),
-        startDate: form.startDate,
-        description: form.description || undefined,
-        province: form.province,
-        location: form.location || undefined,
-      });
-      navigate(`/tournaments/${data.tournament.id}`);
+      const body = new FormData();
+      for (const [k, v] of Object.entries(form)) {
+        if (v === "") continue;
+        if ((k === "groups" || k === "advancePerGroup") && !form.format.startsWith("group")) continue;
+        body.append(k, v);
+      }
+      if (poster) body.append("poster", await compressImage(poster));
+      const { data } = await api.post("/tournaments", body);
+      navigate(`/tournaments/${data.tournament.slug || data.tournament.id}`);
     } catch (err) {
       setError(apiError(err, "Could not create tournament."));
     } finally {
@@ -125,6 +145,32 @@ export default function TournamentCreate() {
 
         <SportPicker value={form.sport} onChange={(v) => set("sport", v)} />
 
+        <div className="flex flex-col gap-3">
+          <span className="text-sm font-medium text-ink-muted">
+            Format <span className="text-accent">*</span>
+          </span>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {FORMATS.map((f) => (
+              <label
+                key={f.value}
+                className={`cursor-pointer rounded-2xl border p-4 transition-colors ${form.format === f.value ? "border-accent bg-accent-soft" : "border-border bg-base-2 hover:border-ink-faint/50"}`}
+              >
+                <input type="radio" name="format" className="sr-only" checked={form.format === f.value} onChange={() => set("format", f.value)} />
+                <span className="block font-semibold text-ink">{f.label}</span>
+                <span className="mt-1 block text-sm text-ink-muted">{f.hint}</span>
+              </label>
+            ))}
+          </div>
+          {form.format.startsWith("group") && (
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Input label="Number of groups" type="number" min={1} max={16} value={form.groups} onChange={(e) => set("groups", e.target.value)} />
+              {form.format === "group_knockout" && (
+                <Input label="Teams through from each group" type="number" min={1} max={8} value={form.advancePerGroup} onChange={(e) => set("advancePerGroup", e.target.value)} />
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="grid gap-8 md:grid-cols-2">
           <div className="flex flex-col gap-2">
             <span className="text-sm font-medium text-ink-muted">
@@ -137,12 +183,21 @@ export default function TournamentCreate() {
             />
           </div>
           <Input
-            label="Start date"
-            type="date"
+            label="Minimum teams"
+            type="number"
+            min={4}
+            max={Number(form.maxTeams)}
             required
-            value={form.startDate}
-            onChange={(e) => set("startDate", e.target.value)}
+            value={form.minTeams}
+            onChange={(e) => set("minTeams", e.target.value)}
+            hint="At least 4. With 4 eligible teams you can submit the tournament to The Arena for approval."
           />
+        </div>
+
+        <div className="grid gap-8 md:grid-cols-3">
+          <Input label="Registration closes" type="date" value={form.registrationClosesAt} onChange={(e) => set("registrationClosesAt", e.target.value)} hint="Optional" />
+          <Input label="Start date" type="date" required value={form.startDate} onChange={(e) => set("startDate", e.target.value)} />
+          <Input label="End date" type="date" value={form.endDate} onChange={(e) => set("endDate", e.target.value)} hint="Optional" />
         </div>
 
         <div className="grid gap-8 md:grid-cols-2">
@@ -158,6 +213,12 @@ export default function TournamentCreate() {
             />
             <span className="text-xs text-ink-faint">Used to show this tournament in players' Near me results.</span>
           </div>
+          <Select label="District" value={form.district} onChange={(e) => set("district", e.target.value)}>
+            <option value="">Not set</option>
+            {districtOptions(form.province || undefined).map((d) => (
+              <option key={d.value}>{d.value}</option>
+            ))}
+          </Select>
           <Input
             label="Venue"
             value={form.location}
@@ -170,8 +231,25 @@ export default function TournamentCreate() {
           label="Description"
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
-          placeholder="Rules, venue, prize pool, etc. (optional)"
+          placeholder="What it's about and who should enter (optional)"
         />
+
+        <div className="grid gap-8 md:grid-cols-2">
+          <Input label="Entry fee (NPR)" type="number" min={0} value={form.entryFee} onChange={(e) => set("entryFee", e.target.value)} hint="Shown to teams. Online payment of fees isn't available yet; collect it yourself." />
+          <Input label="Prizes" value={form.prizes} maxLength={1000} onChange={(e) => set("prizes", e.target.value)} placeholder="e.g. Rs 50,000 and a trophy" />
+        </div>
+
+        <Textarea label="Rules" value={form.rules} maxLength={5000} onChange={(e) => set("rules", e.target.value)} placeholder="Match length, squad size, tie-breaks, conduct… (optional)" />
+
+        <label className="flex flex-col gap-2 text-sm font-medium text-ink-muted">
+          Poster (optional)
+          <input type="file" accept="image/*" onChange={(e) => setPoster(e.target.files?.[0] ?? null)} />
+        </label>
+
+        <p className="rounded-2xl border border-border bg-base-2 p-4 text-sm text-ink-muted">
+          How it works: teams ask to join and you approve them. Once at least {form.minTeams || 4} eligible teams (run by at least two
+          different people) are in, submit the tournament for review. The Arena approves it, then you generate the fixtures.
+        </p>
 
         {error && <FormError>{error}</FormError>}
         <div className="flex flex-wrap items-center gap-4 border-t border-border pt-8">

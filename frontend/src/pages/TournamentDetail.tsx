@@ -1,424 +1,485 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Play, Shield, Trophy } from "lucide-react";
+import { useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CalendarDays, Check, ClipboardList, Crown, MapPin, Play, Send, Trophy, X } from "lucide-react";
 import api, { assetUrl } from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
-import type { TeamSummary, TournamentDetail as TournamentDetailType, TournamentMatch } from "@/types";
-import { apiError } from "@/types";
+import { useApi } from "@/hooks/useApi";
+import { apiError, teamPath } from "@/types";
+import type { MatchRow, TeamSummary } from "@/types";
 import { getSportBySlug } from "@/data/sports";
-import { Loading, ErrorState } from "@/components/ui/StateBlock";
+import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
 import Button, { buttonClass } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Field";
 import { StatusBadge } from "@/components/ui/Badge";
-import PageHero from "@/components/page/PageHero";
 import { FormError } from "@/components/page/AuthShell";
+import PageHero from "@/components/page/PageHero";
+import { MatchCard } from "./Matches";
 
-interface Standing {
-  team: TeamSummary;
-  wins: number;
-  losses: number;
+interface Registration {
+  id: string;
+  team: TeamSummary | null;
+  status: "requested" | "approved" | "rejected" | "withdrawn";
+  rosterSize: number;
+  eligibility: { ok: boolean; reasons: string[] };
+  requestedBy?: { id: string; name: string } | null;
+  note?: string | null;
 }
 
-const scoreInput =
-  "num h-10 w-full rounded-lg border border-border bg-base-2 px-3 text-center text-sm text-ink outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-4 focus:ring-accent/15";
+interface TableRow {
+  team: { id: string; name: string; slug?: string | null };
+  played: number;
+  won: number;
+  drawn: number;
+  lost: number;
+  scoreFor: number;
+  scoreAgainst: number;
+  diff: number;
+  points: number;
+}
 
-function MatchCard({
-  match,
-  isOrganizer,
-  onSubmitScore,
-}: {
-  match: TournamentMatch;
+interface TournamentPage {
+  tournament: {
+    id: string;
+    name: string;
+    slug: string | null;
+    sport: string;
+    status: string;
+    format: string;
+    minTeams: number;
+    maxTeams: number;
+    teamsCount: number;
+    startDate: string | null;
+    endDate: string | null;
+    registrationClosesAt: string | null;
+    entryFee: number;
+    poster: string | null;
+    organizer: { id: string; name: string };
+    province: string;
+    district: string | null;
+    location?: string;
+    description?: string;
+    prizes: string | null;
+    rules: string | null;
+    winner: { id: string; name: string; slug: string | null } | null;
+    review: { decision: string; note: string | null } | null;
+    cancelReason: string | null;
+    matches: MatchRow[];
+  };
+  registrations: Registration[];
+  eligibility: { approvedTeams: number; distinctOwners: number; needed: number; readyForReview: boolean };
+  standings: { group: string; rows: TableRow[] }[];
   isOrganizer: boolean;
-  onSubmitScore: (matchId: string, scoreA: number, scoreB: number, winnerTeamId: string) => Promise<void>;
-}) {
-  const [scoreA, setScoreA] = useState(match.scoreA?.toString() ?? "");
-  const [scoreB, setScoreB] = useState(match.scoreB?.toString() ?? "");
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState("");
+  viewerTeams: { id: string; name: string; registration: string | null }[];
+}
 
-  const canEnter = isOrganizer && match.status !== "completed" && match.teamA && match.teamB;
+const FORMAT_LABEL: Record<string, string> = {
+  knockout: "Knockout",
+  round_robin: "Round robin",
+  league: "League (home & away)",
+  group_stage: "Group stage",
+  group_knockout: "Groups + knockout",
+};
 
-  async function submit() {
-    if (!match.teamA || !match.teamB) return;
-    const a = Number(scoreA);
-    const b = Number(scoreB);
-    if (Number.isNaN(a) || Number.isNaN(b) || a === b) {
-      setErr("Enter two different, valid scores to determine a winner.");
-      return;
-    }
-    const winnerTeamId = a > b ? match.teamA.id : match.teamB.id;
-    setErr("");
-    setSaving(true);
+const STATUS_LABEL: Record<string, string> = {
+  open: "taking teams",
+  under_review: "under_review",
+  approved: "approved",
+  rejected: "rejected",
+  ongoing: "ongoing",
+  completed: "completed",
+  cancelled: "cancelled",
+};
+
+type Tab = "overview" | "teams" | "fixtures" | "table";
+
+function useAction(reload: () => void) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  async function run(key: string, fn: () => Promise<unknown>) {
+    setBusy(key);
+    setError("");
     try {
-      await onSubmitScore(match.id, a, b, winnerTeamId);
-    } catch (e) {
-      setErr(apiError(e, "Could not save result."));
+      await fn();
+      reload();
+    } catch (err) {
+      setError(apiError(err));
     } finally {
-      setSaving(false);
+      setBusy(null);
     }
   }
+  return { busy, error, run };
+}
+
+function OrganizerPanel({ page, reload }: { page: TournamentPage; reload: () => void }) {
+  const t = page.tournament;
+  const e = page.eligibility;
+  const { busy, error, run } = useAction(reload);
+  const pct = Math.min(100, Math.round((e.approvedTeams / e.needed) * 100));
+  return (
+    <section className="panel flex flex-col gap-4 p-6">
+      <h2 className="font-display text-2xl font-bold text-ink">Organizer</h2>
+      {error && <FormError>{error}</FormError>}
+      {(t.status === "open" || t.status === "rejected") && (
+        <>
+          {t.status === "rejected" && t.review?.note && (
+            <p className="rounded-xl border border-danger/25 bg-danger/10 p-3 text-sm text-danger">Not approved: {t.review.note}. Edit the tournament, then submit again.</p>
+          )}
+          <div>
+            <div className="flex justify-between text-sm">
+              <span className="text-ink-muted">Eligible teams approved</span>
+              <span className="num font-semibold text-ink">
+                {e.approvedTeams} / {e.needed}
+              </span>
+            </div>
+            <span className="mt-2 block h-2 overflow-hidden rounded-full bg-base-2">
+              <span className="block h-full rounded-full bg-accent" style={{ width: `${pct}%` }} />
+            </span>
+            <p className="mt-2 text-xs text-ink-faint">
+              Teams must be run by at least two different people besides you ({e.distinctOwners} so far). Four eligible teams make the
+              tournament eligible for review; they don’t start it.
+            </p>
+          </div>
+          <Button loading={busy === "submit"} disabled={!e.readyForReview} icon={<Send className="h-4 w-4" />} onClick={() => run("submit", () => api.post(`/tournaments/${t.id}/submit-review`))}>
+            Submit for approval
+          </Button>
+        </>
+      )}
+      {t.status === "under_review" && <p className="text-sm text-ink-muted">Waiting for The Arena’s review. Teams can still ask to join.</p>}
+      {t.status === "approved" && (
+        <>
+          <p className="text-sm text-ink-muted">Approved. Starting closes registration and generates the fixtures for {page.eligibility.approvedTeams} teams.</p>
+          <Button
+            loading={busy === "start"}
+            icon={<Play className="h-4 w-4" />}
+            onClick={() => window.confirm("Close registration and generate fixtures?") && run("start", () => api.post(`/tournaments/${t.id}/start`))}
+          >
+            Start tournament
+          </Button>
+        </>
+      )}
+      {t.status === "ongoing" && <p className="text-sm text-ink-muted">Report results from each match page; they count once a team confirms them.</p>}
+      {!["completed", "cancelled"].includes(t.status) && (
+        <Button
+          variant="ghost"
+          loading={busy === "cancel"}
+          onClick={() => {
+            const reason = window.prompt("Why are you cancelling? Teams will see this.");
+            if (reason) run("cancel", () => api.post(`/tournaments/${t.id}/cancel`, { reason }));
+          }}
+        >
+          Cancel tournament
+        </Button>
+      )}
+    </section>
+  );
+}
+
+function TeamsTab({ page, reload }: { page: TournamentPage; reload: () => void }) {
+  const t = page.tournament;
+  const { user } = useAuth();
+  const { busy, error, run } = useAction(reload);
+  const [teamId, setTeamId] = useState("");
+  const approved = page.registrations.filter((r) => r.status === "approved");
+  const requests = page.registrations.filter((r) => r.status === "requested");
+  const canRequest = ["open", "under_review", "approved", "rejected"].includes(t.status);
+  const available = page.viewerTeams.filter((x) => !x.registration || x.registration === "withdrawn" || x.registration === "rejected");
 
   return (
-    <div className="panel w-72 shrink-0 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-border px-4 py-2.5 text-xs text-ink-faint">
-        <span>Round {match.round}</span>
-        <StatusBadge status={match.status} />
-      </div>
-      <div className="divide-y divide-border">
-        {[
-          { team: match.teamA, score: match.scoreA },
-          { team: match.teamB, score: match.scoreB },
-        ].map((slot, i) => {
-          const isWinner = match.winner && slot.team && match.winner.id === slot.team.id;
-          return (
-            <div
-              key={i}
-              className={`flex items-center justify-between gap-3 px-4 py-3 text-sm ${
-                isWinner ? "bg-accent-soft font-semibold text-ink" : "text-ink-muted"
-              }`}
-            >
-              <span className="flex min-w-0 items-center gap-2">
-                {isWinner && <Trophy className="h-3.5 w-3.5 shrink-0 text-premium" />}
-                <span className={`truncate ${slot.team ? "" : "italic text-ink-faint"}`}>{slot.team?.name ?? "TBD"}</span>
-              </span>
-              {slot.score !== null && slot.score !== undefined && (
-                <span className={`num font-display text-xl font-bold ${isWinner ? "text-accent" : "text-ink"}`}>
-                  {slot.score}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {canEnter && (
-        <div className="flex flex-col gap-2 border-t border-border bg-base-2 p-3">
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="number"
-              value={scoreA}
-              onChange={(e) => setScoreA(e.target.value)}
-              placeholder="A"
-              aria-label={`Score for ${match.teamA?.name ?? "team A"}`}
-              className={scoreInput}
-            />
-            <input
-              type="number"
-              value={scoreB}
-              onChange={(e) => setScoreB(e.target.value)}
-              placeholder="B"
-              aria-label={`Score for ${match.teamB?.name ?? "team B"}`}
-              className={scoreInput}
-            />
+    <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <section>
+        <h2 className="font-display text-2xl font-bold text-ink">
+          Teams <span className="num text-ink-faint">{approved.length}/{t.maxTeams}</span>
+        </h2>
+        {error && (
+          <div className="mt-4">
+            <FormError>{error}</FormError>
           </div>
-          {err && <p className="text-xs text-danger">{err}</p>}
-          <Button size="sm" onClick={submit} loading={saving} fullWidth>
-            Submit result
-          </Button>
-        </div>
-      )}
+        )}
+        {approved.length === 0 ? (
+          <p className="mt-4 text-sm text-ink-faint">No teams approved yet.</p>
+        ) : (
+          <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+            {approved.map((r) =>
+              r.team ? (
+                <li key={r.id} className="panel flex items-center gap-3 p-4">
+                  <Link to={teamPath(r.team)} className="min-w-0 flex-1 truncate font-semibold text-ink hover:text-accent">
+                    {r.team.name}
+                  </Link>
+                  <span className="text-xs text-ink-faint">{r.rosterSize} players</span>
+                </li>
+              ) : null
+            )}
+          </ul>
+        )}
+
+        {page.isOrganizer && requests.length > 0 && (
+          <>
+            <h3 className="mt-10 font-display text-xl font-semibold text-ink">Requests to join</h3>
+            <ul className="panel mt-4 divide-y divide-border">
+              {requests.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center gap-3 p-4">
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-semibold text-ink">{r.team?.name}</span>
+                    <span className="block text-xs text-ink-faint">
+                      {r.rosterSize} players · by {r.requestedBy?.name ?? "?"}
+                      {r.note ? ` · “${r.note}”` : ""}
+                    </span>
+                    {!r.eligibility.ok && <span className="block text-xs text-danger">{r.eligibility.reasons.join("; ")}</span>}
+                  </span>
+                  <Button size="sm" loading={busy === `a-${r.id}`} icon={<Check className="h-4 w-4" />} onClick={() => run(`a-${r.id}`, () => api.patch(`/tournaments/${t.id}/registrations/${r.id}`, { action: "approve" }))}>
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="secondary" loading={busy === `r-${r.id}`} icon={<X className="h-4 w-4" />} onClick={() => run(`r-${r.id}`, () => api.patch(`/tournaments/${t.id}/registrations/${r.id}`, { action: "reject" }))}>
+                    Reject
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+
+      <aside>
+        {canRequest && user && (
+          <div className="panel flex flex-col gap-3 p-5">
+            <h3 className="font-display text-xl font-semibold text-ink">Enter your team</h3>
+            {page.viewerTeams.filter((x) => x.registration === "requested" || x.registration === "approved").map((x) => (
+              <p key={x.id} className="text-sm text-ink-muted">
+                {x.name}: <StatusBadge status={x.registration!} />
+              </p>
+            ))}
+            {available.length ? (
+              <>
+                <select className="h-11 rounded-xl border border-border bg-base-2 px-3 text-sm" value={teamId} onChange={(e) => setTeamId(e.target.value)} aria-label="Team">
+                  <option value="">Choose a team you run</option>
+                  {available.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.name}
+                    </option>
+                  ))}
+                </select>
+                <Button disabled={!teamId} loading={busy === "req"} onClick={() => run("req", () => api.post(`/tournaments/${t.id}/registrations`, { teamId }))}>
+                  Ask to join
+                </Button>
+              </>
+            ) : (
+              page.viewerTeams.length === 0 && (
+                <p className="text-sm text-ink-muted">
+                  You need a {getSportBySlug(t.sport)?.name ?? t.sport} team you own or captain.{" "}
+                  <Link to="/teams/create" className="text-accent hover:underline">
+                    Create one
+                  </Link>
+                </p>
+              )
+            )}
+            {t.entryFee > 0 && <p className="text-xs text-ink-faint">Entry fee Rs {t.entryFee}, paid to the organizer.</p>}
+          </div>
+        )}
+        {canRequest && !user && (
+          <Link to="/login" state={{ from: `/tournaments/${t.slug || t.id}` }} className={buttonClass({ fullWidth: true })}>
+            Log in to enter a team
+          </Link>
+        )}
+      </aside>
+    </div>
+  );
+}
+
+function FixturesTab({ page }: { page: TournamentPage }) {
+  const matches = page.tournament.matches;
+  if (!matches.length) return <EmptyState title="No fixtures yet" message="Fixtures are generated when the organizer starts the tournament." />;
+  const sections = new Map<string, MatchRow[]>();
+  for (const m of matches) {
+    const key = m.stage === "knockout" ? `Knockout · round ${m.round}` : m.stage === "group" ? `Group ${m.group} · round ${m.round}` : `Round ${m.round}`;
+    sections.set(key, [...(sections.get(key) ?? []), m]);
+  }
+  return (
+    <div className="flex flex-col gap-10">
+      {[...sections.entries()].map(([title, list]) => (
+        <section key={title}>
+          <h3 className="font-display text-xl font-semibold text-ink">{title}</h3>
+          <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {list.map((m) =>
+              (!m.teamA || !m.teamB) && m.status === "completed" ? (
+                <div key={m.id} className="rounded-2xl border border-dashed border-border p-5 text-sm text-ink-faint">
+                  Bye: {(typeof m.teamA === "object" && m.teamA?.name) || (typeof m.teamB === "object" && m.teamB?.name) || "team"} goes through
+                </div>
+              ) : (
+                <MatchCard key={m.id} m={m} />
+              )
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function TableTab({ page }: { page: TournamentPage }) {
+  if (!page.standings.length) return <EmptyState title="No table for this format" message="Knockout tournaments are followed on the fixtures tab." />;
+  return (
+    <div className="flex flex-col gap-10">
+      {page.standings.map((g) => (
+        <section key={g.group}>
+          {page.standings.length > 1 && <h3 className="font-display text-xl font-semibold text-ink">Group {g.group}</h3>}
+          <div className="mt-4 overflow-x-auto rounded-2xl border border-border">
+            <table className="w-full min-w-[34rem] text-sm">
+              <thead className="bg-surface text-xs uppercase tracking-wide text-ink-faint">
+                <tr>
+                  {["#", "Team", "P", "W", "D", "L", "For", "Agst", "Diff", "Pts"].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left font-semibold">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {g.rows.map((r, i) => (
+                  <tr key={r.team.id}>
+                    <td className="num px-3 py-2 text-ink-faint">{i + 1}</td>
+                    <td className="px-3 py-2 font-semibold text-ink">
+                      <Link to={`/teams/${r.team.slug || r.team.id}`} className="hover:text-accent">
+                        {r.team.name}
+                      </Link>
+                    </td>
+                    {[r.played, r.won, r.drawn, r.lost, r.scoreFor, r.scoreAgainst, r.diff].map((v, k) => (
+                      <td key={k} className="num px-3 py-2 text-ink-muted">
+                        {v}
+                      </td>
+                    ))}
+                    <td className="num px-3 py-2 font-bold text-ink">{r.points}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ))}
+      <p className="text-xs text-ink-faint">Only verified results count. Ties are split by score difference, then score for.</p>
     </div>
   );
 }
 
 export default function TournamentDetail() {
   const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
-  const [tournament, setTournament] = useState<TournamentDetailType | null>(null);
-  const [standings, setStandings] = useState<Standing[]>([]);
-  const [myTeams, setMyTeams] = useState<TeamSummary[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [params, setParams] = useSearchParams();
+  const { data, loading, error, reload } = useApi<TournamentPage>(`/tournaments/${id}`);
+  const tab = (params.get("tab") as Tab) || "overview";
 
-  const load = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    setError("");
-    try {
-      const [{ data: tData }, standingsRes] = await Promise.all([
-        api.get(`/tournaments/${id}`),
-        api.get(`/tournaments/${id}/standings`).catch(() => ({ data: { standings: [] } })),
-      ]);
-      setTournament(tData.tournament);
-      setStandings(standingsRes.data.standings ?? []);
-    } catch (err) {
-      setError(apiError(err, "Could not load this tournament."));
-    } finally {
-      setLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!user || !tournament) return;
-    api
-      .get("/my/teams")
-      .then(({ data }) => {
-        const owned = (data.teams ?? []).filter(
-          (t: TeamSummary) => t.owner?.id === user.id && t.sport === tournament.sport
-        );
-        setMyTeams(owned);
-      })
-      .catch(() => {});
-  }, [user, tournament]);
-
-  const matchesByRound = useMemo(() => {
-    if (!tournament) return [] as [number, TournamentMatch[]][];
-    const map = new Map<number, TournamentMatch[]>();
-    for (const m of tournament.matches ?? []) {
-      if (!map.has(m.round)) map.set(m.round, []);
-      map.get(m.round)!.push(m);
-    }
-    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
-  }, [tournament]);
-
-  async function registerTeam() {
-    if (!selectedTeam || !id) return;
-    setActionError("");
-    setBusy(true);
-    try {
-      await api.post(`/tournaments/${id}/register-team`, { teamId: selectedTeam });
-      await load();
-      setSelectedTeam("");
-    } catch (err) {
-      setActionError(apiError(err, "Could not register your team."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function startTournament() {
-    if (!id) return;
-    setActionError("");
-    setBusy(true);
-    try {
-      await api.post(`/tournaments/${id}/start`);
-      await load();
-    } catch (err) {
-      setActionError(apiError(err, "Could not start the tournament."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submitScore(matchId: string, scoreA: number, scoreB: number, winnerTeamId: string) {
-    await api.patch(`/tournaments/${id}/matches/${matchId}`, { scoreA, scoreB, winnerTeamId });
-    await load();
-  }
-
-  if (loading) return <Loading label="Loading tournament…" />;
-  if (error || !tournament) return <ErrorState message={error || "Tournament not found."} onRetry={load} />;
-
-  const sport = getSportBySlug(tournament.sport);
-  const isOrganizer = user && tournament.organizer?.id === user.id;
-  const alreadyRegisteredTeamIds = new Set(tournament.teams?.map((t) => t.id));
-  const registrableTeams = myTeams.filter((t) => !alreadyRegisteredTeamIds.has(t.id));
-  const isFull = tournament.teamsCount >= tournament.maxTeams;
-  const start = new Date(tournament.startDate);
-  const showRegister = !isOrganizer && tournament.status === "upcoming" && !isFull;
+  if (loading && !data) return <Loading label="Loading tournament…" />;
+  if (error || !data) return <ErrorState message={error || "Tournament not found."} onRetry={reload} />;
+  const t = data.tournament;
+  const sport = getSportBySlug(t.sport);
+  const tabs: { key: Tab; label: string }[] = [
+    { key: "overview", label: "Overview" },
+    { key: "teams", label: `Teams (${t.teamsCount})` },
+    { key: "fixtures", label: "Fixtures" },
+    ...(data.standings.length ? [{ key: "table" as Tab, label: "Table" }] : []),
+  ];
 
   return (
     <main className="flex-1">
       <PageHero
-        size="lg"
-        image={sport?.image}
+        image={t.poster ? assetUrl(t.poster) : sport?.image}
         above={
           <Link to="/tournaments" className="inline-flex items-center gap-1.5 hover:text-ink">
-            <ArrowLeft className="h-4 w-4" /> All tournaments
+            <ArrowLeft className="h-4 w-4" /> Tournaments
           </Link>
         }
-        title={tournament.name}
-        lead={tournament.description || undefined}
-        actions={
-          isOrganizer && tournament.status === "upcoming" ? (
-            <Button
-              size="lg"
-              onClick={startTournament}
-              loading={busy}
-              disabled={tournament.teamsCount < 2}
-              icon={<Play className="h-4 w-4" />}
-            >
-              Start tournament
-            </Button>
-          ) : undefined
+        title={t.name}
+        lead={
+          <span className="flex flex-wrap items-center gap-3">
+            <StatusBadge status={STATUS_LABEL[t.status] ?? t.status} />
+            <span>
+              {sport?.name ?? t.sport} · {FORMAT_LABEL[t.format] ?? t.format} · by {t.organizer?.name}
+            </span>
+          </span>
         }
       >
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 border-t border-border pt-6 sm:flex sm:flex-wrap sm:gap-x-12">
-          <div>
-            <dt className="text-sm text-ink-faint">Status</dt>
-            <dd className="mt-1.5">
-              <StatusBadge status={tournament.status} />
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-ink-faint">Sport</dt>
-            <dd className="mt-1 font-semibold text-ink">{sport?.name ?? tournament.sport}</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-ink-faint">Starts</dt>
-            <dd className="num mt-1 font-semibold text-ink">
-              {start.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-ink-faint">Teams</dt>
-            <dd className="num mt-1 font-semibold text-ink">
-              {tournament.teamsCount} <span className="text-ink-faint">of {tournament.maxTeams}</span>
-            </dd>
-          </div>
-          <div>
-            <dt className="text-sm text-ink-faint">Organizer</dt>
-            <dd className="mt-1 font-semibold text-ink">{tournament.organizer?.name}</dd>
-          </div>
-        </dl>
+        <nav className="flex gap-1 overflow-x-auto" aria-label="Tournament sections">
+          {tabs.map((x) => (
+            <button
+              key={x.key}
+              onClick={() => setParams({ tab: x.key })}
+              aria-current={tab === x.key ? "page" : undefined}
+              className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold ${tab === x.key ? "bg-accent text-white" : "bg-surface text-ink-muted hover:text-ink"}`}
+            >
+              {x.label}
+            </button>
+          ))}
+        </nav>
       </PageHero>
 
-      <div className="container-x flex flex-col gap-14 py-12 md:py-16">
-        {(showRegister || actionError) && (
-          <section className="panel flex flex-col gap-4 p-6 md:flex-row md:items-center md:justify-between">
-            {showRegister && (
-              <>
-                <div>
-                  <h2 className="font-display text-2xl font-bold text-ink">Enter your team</h2>
-                  <p className="mt-1 text-sm text-ink-muted">
-                    <span className="num">{tournament.maxTeams - tournament.teamsCount}</span> places left.
-                  </p>
+      <div className="container-x py-12">
+        {t.status === "completed" && t.winner && (
+          <p className="mb-8 flex items-center gap-3 rounded-2xl border border-premium/30 bg-premium-soft p-5 font-display text-2xl font-bold text-premium">
+            <Crown className="h-6 w-6" /> Champions:{" "}
+            <Link to={`/teams/${t.winner.slug || t.winner.id}`} className="underline-offset-4 hover:underline">
+              {t.winner.name}
+            </Link>
+          </p>
+        )}
+        {t.status === "cancelled" && <p className="mb-8 rounded-2xl border border-danger/25 bg-danger/10 p-4 text-sm text-danger">Cancelled{t.cancelReason ? `: ${t.cancelReason}` : ""}.</p>}
+
+        {tab === "overview" && (
+          <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_22rem]">
+            <section className="flex flex-col gap-8">
+              <dl className="panel grid gap-4 p-6 sm:grid-cols-2">
+                <div className="flex gap-3">
+                  <CalendarDays className="h-5 w-5 text-accent" />
+                  <div>
+                    <dt className="text-sm text-ink-faint">Dates</dt>
+                    <dd className="font-semibold text-ink">
+                      {t.startDate ? new Date(t.startDate).toLocaleDateString() : "TBD"}
+                      {t.endDate ? ` – ${new Date(t.endDate).toLocaleDateString()}` : ""}
+                    </dd>
+                    {t.registrationClosesAt && <dd className="text-xs text-ink-faint">Registration closes {new Date(t.registrationClosesAt).toLocaleDateString()}</dd>}
+                  </div>
                 </div>
-                {!user ? (
-                  <Link
-                    to="/login"
-                    state={{ from: `/tournaments/${id}` }}
-                    className={buttonClass({ variant: "secondary" })}
-                  >
-                    Log in to register your team
-                  </Link>
-                ) : registrableTeams.length > 0 ? (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <Select
-                      value={selectedTeam}
-                      onChange={(e) => setSelectedTeam(e.target.value)}
-                      aria-label="Your team"
-                      className="sm:w-64"
-                    >
-                      <option value="">Select your team</option>
-                      {registrableTeams.map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </Select>
-                    <Button onClick={registerTeam} disabled={!selectedTeam} loading={busy}>
-                      Register team
-                    </Button>
+                <div className="flex gap-3">
+                  <MapPin className="h-5 w-5 text-accent" />
+                  <div>
+                    <dt className="text-sm text-ink-faint">Where</dt>
+                    <dd className="font-semibold text-ink">{[t.location, t.district, t.province].filter(Boolean).join(", ")}</dd>
                   </div>
-                ) : (
-                  <p className="text-sm text-ink-muted">
-                    You don’t have a {sport?.name ?? tournament.sport} team to register.{" "}
-                    <Link to="/teams/create" className="font-semibold text-accent hover:underline">
-                      Create one
-                    </Link>
-                  </p>
-                )}
-              </>
-            )}
-            {actionError && (
-              <div className="md:basis-full">
-                <FormError>{actionError}</FormError>
-              </div>
-            )}
-          </section>
-        )}
-
-        {matchesByRound.length > 0 && (
-          <section>
-            <h2 className="font-display text-3xl font-bold text-ink">Bracket</h2>
-            <div className="-mx-4 mt-6 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
-              <div className="flex w-max gap-8">
-                {matchesByRound.map(([round, matches]) => (
-                  <div key={round} className="flex flex-col gap-4">
-                    <span className="flex items-center gap-2 text-sm font-semibold text-ink-muted">
-                      {matches.length === 1 && <Trophy className="h-4 w-4 text-premium" />}
-                      {matches.length === 1 ? "Final" : `Round ${round}`}
-                    </span>
-                    <div className="flex flex-1 flex-col justify-around gap-5">
-                      {matches.map((m) => (
-                        <MatchCard key={m.id} match={m} isOrganizer={!!isOrganizer} onSubmitScore={submitScore} />
-                      ))}
-                    </div>
+                </div>
+                <div className="flex gap-3">
+                  <Trophy className="h-5 w-5 text-accent" />
+                  <div>
+                    <dt className="text-sm text-ink-faint">Prizes</dt>
+                    <dd className="font-semibold text-ink">{t.prizes || "Not listed"}</dd>
                   </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        <div className={`grid gap-10 ${standings.length > 0 ? "lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]" : ""}`}>
-          <section>
-            <div className="flex items-baseline justify-between">
-              <h2 className="font-display text-3xl font-bold text-ink">Registered teams</h2>
-              <span className="num text-sm text-ink-faint">
-                {tournament.teams?.length ?? 0}/{tournament.maxTeams}
-              </span>
-            </div>
-            <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,13rem),1fr))] gap-3">
-              {tournament.teams?.length ? (
-                tournament.teams.map((t) => (
-                  <li key={t.id}>
-                    <Link
-                      to={`/teams/${t.id}`}
-                      className="panel card-lift flex items-center gap-3 p-3"
-                    >
-                      {t.logo ? (
-                        <img src={assetUrl(t.logo)} alt="" className="h-10 w-10 rounded-lg object-cover" />
-                      ) : (
-                        <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-surface-2 text-ink-faint">
-                          <Shield className="h-4 w-4" />
-                        </span>
-                      )}
-                      <span className="truncate text-sm font-semibold text-ink">{t.name}</span>
-                    </Link>
-                  </li>
-                ))
-              ) : (
-                <li className="text-sm text-ink-muted">No teams registered yet.</li>
+                </div>
+                <div className="flex gap-3">
+                  <ClipboardList className="h-5 w-5 text-accent" />
+                  <div>
+                    <dt className="text-sm text-ink-faint">Teams</dt>
+                    <dd className="font-semibold text-ink">
+                      {t.minTeams}–{t.maxTeams} · entry {t.entryFee ? `Rs ${t.entryFee}` : "free"}
+                    </dd>
+                  </div>
+                </div>
+              </dl>
+              {t.description && <p className="whitespace-pre-line text-lg text-ink-muted">{t.description}</p>}
+              {t.rules && (
+                <section>
+                  <h2 className="font-display text-2xl font-bold text-ink">Rules</h2>
+                  <p className="mt-3 whitespace-pre-line text-ink-muted">{t.rules}</p>
+                </section>
               )}
-            </ul>
-          </section>
-
-          {standings.length > 0 && (
-            <section>
-              <h2 className="font-display text-3xl font-bold text-ink">Standings</h2>
-              <div className="panel mt-6 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs font-medium text-ink-faint">
-                      <th scope="col" className="w-12 px-5 py-3.5">#</th>
-                      <th scope="col" className="px-5 py-3.5">Team</th>
-                      <th scope="col" className="px-5 py-3.5 text-right">Wins</th>
-                      <th scope="col" className="px-5 py-3.5 text-right">Losses</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {standings.map((s, i) => (
-                      <tr key={s.team.id} className="border-b border-border last:border-0">
-                        <td className="num px-5 py-3.5 font-display text-lg font-bold text-ink-faint">{i + 1}</td>
-                        <td className="px-5 py-3.5 font-semibold text-ink">{s.team.name}</td>
-                        <td className="num px-5 py-3.5 text-right text-success">{s.wins}</td>
-                        <td className="num px-5 py-3.5 text-right text-danger">{s.losses}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </section>
-          )}
-        </div>
+            <aside className="flex flex-col gap-6">
+              {data.isOrganizer && <OrganizerPanel page={data} reload={reload} />}
+              {!data.isOrganizer && ["open", "under_review", "approved"].includes(t.status) && (
+                <button onClick={() => setParams({ tab: "teams" })} className={buttonClass({ fullWidth: true, size: "lg" })}>
+                  Enter a team
+                </button>
+              )}
+            </aside>
+          </div>
+        )}
+        {tab === "teams" && <TeamsTab page={data} reload={reload} />}
+        {tab === "fixtures" && <FixturesTab page={data} />}
+        {tab === "table" && <TableTab page={data} />}
       </div>
     </main>
   );

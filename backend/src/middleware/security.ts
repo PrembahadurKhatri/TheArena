@@ -47,6 +47,14 @@ export const authLimiter = rateLimit({
   ...json429("Too many attempts. Please wait 15 minutes and try again."),
 });
 
+// Actions that create content for other people (invitations, challenges,
+// reports, reviews, listings): stop one client flooding them.
+export const actionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.ACTION_RATE_LIMIT_MAX) || 60,
+  ...json429("You're doing that a lot. Please wait a few minutes and try again."),
+});
+
 // Password reset emails: stop the endpoint being used to spam inboxes.
 export const passwordResetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,

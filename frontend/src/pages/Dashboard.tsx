@@ -4,6 +4,7 @@ import { ArrowUpRight, CalendarDays, Crown, MapPin, Plus } from "lucide-react";
 import api, { assetUrl } from "@/api/axios";
 import { useAuth } from "@/context/AuthContext";
 import type { BookingSummary, MembershipMe, TeamSummary } from "@/types";
+import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
 import { Loading } from "@/components/ui/StateBlock";
 import { StatusBadge } from "@/components/ui/Badge";
@@ -171,6 +172,22 @@ export default function Dashboard() {
                     <span className="flex flex-col items-end gap-1.5">
                       <span className="num font-display text-lg font-bold text-ink">Rs {b.totalAmount}</span>
                       <StatusBadge status={b.status} />
+                      {["pending_payment", "confirmed", "confirmed_unpaid"].includes(b.status) && (
+                        <button
+                          className="text-xs font-semibold text-danger hover:underline"
+                          onClick={async () => {
+                            if (!window.confirm("Cancel this booking?")) return;
+                            try {
+                              await api.post(`/ground-bookings/${b.id}/cancel`);
+                              setBookings((list) => list.map((x) => (x.id === b.id ? { ...x, status: "cancelled" } : x)));
+                            } catch (err) {
+                              window.alert(apiError(err));
+                            }
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      )}
                     </span>
                   </li>
                 );

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Trophy, Users, MapPin, TrendingUp } from "lucide-react";
+import { Trophy, Users, MapPin } from "lucide-react";
 import { SPORTS } from "@/data/sports";
 import PageHero from "@/components/page/PageHero";
 
@@ -7,7 +7,6 @@ const PILLARS = [
   { icon: Users, title: "Teams", to: "/teams", text: "Build a squad, manage your roster, and welcome new players with a simple join-request flow." },
   { icon: Trophy, title: "Tournaments", to: "/tournaments", text: "Organize brackets, track live scores, and watch standings update automatically." },
   { icon: MapPin, title: "Grounds", to: "/grounds", text: "Book verified grounds by the hour with transparent, instant pricing." },
-  { icon: TrendingUp, title: "Rankings", to: "/rankings", text: "Every completed match feeds real player and team leaderboards across 10 sports." },
 ];
 
 export default function About() {
@@ -23,7 +22,7 @@ export default function About() {
         <h2 className="font-display text-4xl font-bold leading-tight text-ink md:text-5xl">One account, ten sports.</h2>
         <p className="text-xl leading-relaxed text-ink-muted">
           The Arena was built for the players who organize their own matches, chase their own tournaments, and still
-          can’t find one place to run it all. We bring teams, tournaments, grounds and rankings together across cricket,
+          can’t find one place to run it all. We bring teams, tournaments, grounds and challenges together across cricket,
           football, tennis, table tennis, volleyball, hockey, badminton, basketball, kabaddi and futsal.
         </p>
       </section>

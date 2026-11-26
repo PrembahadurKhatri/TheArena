@@ -9,6 +9,10 @@ import { isValidProvince } from "../utils/provinces";
 import { getPrimaryClientUrl } from "../config/env";
 import { requireEmail, requireNewPassword, requireString, optionalString } from "../utils/validation";
 import { audit } from "./auditService";
+import { generateUsername, isUsernameTaken, requireUsername, usernameKey } from "../utils/username";
+import { isValidDistrict, parseGeo, provinceOfDistrict } from "../utils/locations";
+import { EXPERIENCE_LEVELS, GENDERS, ISportProfile } from "../models/User";
+import { assertNotBlacklisted } from "./blacklistService";
 
 // bcrypt cost for new and changed passwords. Hashes made with the old cost
 // (10) still verify; they're upgraded on the user's next successful login.
@@ -40,6 +44,8 @@ export async function registerUser(input: {
   phone?: string;
   location?: string;
   province?: string;
+  district?: string;
+  username?: string;
 }) {
   const name = requireString(input.name, "name", { max: 80 });
   const email = requireEmail(input.email);
@@ -51,20 +57,49 @@ export async function registerUser(input: {
     throw new AppError(400, `Invalid province: ${province}`);
   }
 
+  const district = input.district || undefined;
+  if (district) {
+    if (!isValidDistrict(district)) throw new AppError(400, `Invalid district: ${district}`);
+    if (province && provinceOfDistrict(district) !== province) throw new AppError(400, `${district} is not in ${province}`);
+  }
+
   const existing = await User.findOne({ email });
   if (existing) {
     throw new AppError(409, "An account with this email already exists");
   }
+  await assertNotBlacklisted({ email, phone });
+
+  // A username is optional at sign-up: one is generated from the name and
+  // can be changed later.
+  let username: string;
+  if (input.username !== undefined && input.username !== "") {
+    username = requireUsername(input.username);
+    if (await isUsernameTaken(username)) throw new AppError(409, "That username is taken");
+  } else {
+    username = await generateUsername(name);
+  }
 
   const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-  const user = await User.create({
-    name,
-    email,
-    passwordHash,
-    phone,
-    location,
-    province,
-  });
+  let user;
+  try {
+    user = await User.create({
+      name,
+      username,
+      usernameKey: usernameKey(username),
+      email,
+      passwordHash,
+      phone,
+      location,
+      province: province ?? (district ? provinceOfDistrict(district) ?? undefined : undefined),
+      district,
+    });
+  } catch (err: any) {
+    // Lost a race for the same email or username.
+    if (err?.code === 11000) {
+      throw new AppError(409, err?.keyPattern?.usernameKey ? "That username is taken" : "An account with this email already exists");
+    }
+    throw err;
+  }
 
   const token = signToken(user);
   return { token, user };
@@ -109,26 +144,88 @@ export async function logoutAllDevices(user: IUser) {
   return { message: "Signed out of all devices" };
 }
 
-export async function updateMe(
-  user: IUser,
-  updates: {
-    name?: string;
-    phone?: string;
-    photo?: string;
-    location?: string;
-    province?: string;
-    sportPreferences?: string[];
+function optionalDate(value: unknown, field: string): Date | null {
+  if (value === null || value === "") return null;
+  const d = new Date(String(value));
+  if (Number.isNaN(d.getTime())) throw new AppError(400, `${field} is not a valid date`);
+  return d;
+}
+
+function parseJsonField(value: unknown, field: string): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new AppError(400, `${field} must be valid JSON`);
   }
-) {
+}
+
+function parseSportProfiles(value: unknown): ISportProfile[] {
+  const list = parseJsonField(value, "sportProfiles");
+  if (!Array.isArray(list)) throw new AppError(400, "sportProfiles must be an array");
+  if (list.length > 10) throw new AppError(400, "At most 10 sport profiles");
+  const seen = new Set<string>();
+  return list.map((raw: any) => {
+    if (!raw || !isValidSportSlug(raw.sport)) throw new AppError(400, `Invalid sport slug: ${raw?.sport}`);
+    if (seen.has(raw.sport)) throw new AppError(400, `Duplicate sport: ${raw.sport}`);
+    seen.add(raw.sport);
+    const experienceLevel = raw.experienceLevel || undefined;
+    if (experienceLevel && !(EXPERIENCE_LEVELS as readonly string[]).includes(experienceLevel)) {
+      throw new AppError(400, `experienceLevel must be one of: ${EXPERIENCE_LEVELS.join(", ")}`);
+    }
+    return { sport: raw.sport, position: optionalString(raw.position, "position", 40), experienceLevel };
+  });
+}
+
+function parseBool(value: unknown, field: string): boolean {
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  throw new AppError(400, `${field} must be true or false`);
+}
+
+export const PRIVACY_KEYS = ["showEmail", "showPhone", "showLocation", "showAge", "discoverable", "emailNotifications"] as const;
+
+export async function updateMe(user: IUser, updates: Record<string, any>) {
   if (updates.name !== undefined) user.name = requireString(updates.name, "name", { max: 80 });
-  if (updates.phone !== undefined) user.phone = optionalString(updates.phone, "phone", 20);
+  if (updates.phone !== undefined) {
+    user.phone = optionalString(updates.phone, "phone", 20);
+    if (user.phone) await assertNotBlacklisted({ phone: user.phone }, user._id);
+  }
   if (updates.photo !== undefined) user.photo = updates.photo;
   if (updates.location !== undefined) user.location = optionalString(updates.location, "location", 120);
   if (updates.province !== undefined) {
     if (updates.province && !isValidProvince(updates.province)) {
       throw new AppError(400, `Invalid province: ${updates.province}`);
     }
-    user.province = updates.province;
+    user.province = updates.province || undefined;
+  }
+  if (updates.district !== undefined) {
+    if (updates.district && !isValidDistrict(updates.district)) throw new AppError(400, `Invalid district: ${updates.district}`);
+    user.district = updates.district || undefined;
+    // The district decides the province, so the two can't disagree.
+    if (user.district) user.province = provinceOfDistrict(user.district) ?? user.province;
+  }
+  if (user.district && user.province && provinceOfDistrict(user.district) !== user.province) {
+    throw new AppError(400, `${user.district} is not in ${user.province}`);
+  }
+  if (updates.municipality !== undefined) user.municipality = optionalString(updates.municipality, "municipality", 80);
+  if (updates.lat !== undefined || updates.lng !== undefined) {
+    const geo = parseGeo(updates.lat, updates.lng);
+    if (geo !== undefined) user.geo = geo ?? undefined;
+  }
+  if (updates.bio !== undefined) user.bio = optionalString(updates.bio, "bio", 500);
+  if (updates.dateOfBirth !== undefined) {
+    const dob = optionalDate(updates.dateOfBirth, "dateOfBirth");
+    if (dob) {
+      const age = (Date.now() - dob.getTime()) / (365.25 * 86_400_000);
+      if (age < 5 || age > 100) throw new AppError(400, "dateOfBirth must give an age between 5 and 100");
+    }
+    user.dateOfBirth = dob;
+  }
+  if (updates.gender !== undefined) {
+    const g = updates.gender || null;
+    if (g && !(GENDERS as readonly string[]).includes(g)) throw new AppError(400, `gender must be one of: ${GENDERS.join(", ")}`);
+    user.gender = g;
   }
   if (updates.sportPreferences !== undefined) {
     const prefs = Array.isArray(updates.sportPreferences) ? updates.sportPreferences : [updates.sportPreferences];
@@ -137,10 +234,77 @@ export async function updateMe(
         throw new AppError(400, `Invalid sport slug: ${p}`);
       }
     }
-    user.sportPreferences = prefs;
+    user.sportPreferences = [...new Set(prefs as string[])];
+  }
+  if (updates.sportProfiles !== undefined) {
+    user.sportProfiles = parseSportProfiles(updates.sportProfiles) as any;
+    // Every sport with a profile counts as a preferred sport.
+    user.sportPreferences = [...new Set([...(user.sportPreferences ?? []), ...user.sportProfiles.map((p) => p.sport)])];
+  }
+  if (updates.privacy !== undefined) {
+    const privacy: any = parseJsonField(updates.privacy, "privacy");
+    if (!privacy || typeof privacy !== "object") throw new AppError(400, "privacy must be an object");
+    for (const key of PRIVACY_KEYS) {
+      if (privacy[key] !== undefined) (user.privacy as any)[key] = parseBool(privacy[key], `privacy.${key}`);
+    }
   }
   await user.save();
   return user;
+}
+
+/** Change password while signed in. Signs out every other session. */
+export async function changePassword(user: IUser, input: { currentPassword?: unknown; newPassword?: unknown }) {
+  if (typeof input.currentPassword !== "string" || !input.currentPassword) {
+    throw new AppError(400, "currentPassword is required");
+  }
+  const newPassword = requireNewPassword(input.newPassword);
+  const dbUser = await User.findById(user._id).select("+passwordHash +tokenVersion");
+  if (!dbUser) throw new AppError(404, "User not found");
+  const ok = input.currentPassword.length <= 128 && (await bcrypt.compare(input.currentPassword, dbUser.passwordHash));
+  if (!ok) throw new AppError(400, "Current password is incorrect");
+  if (await bcrypt.compare(newPassword, dbUser.passwordHash)) {
+    throw new AppError(400, "New password must be different from the current one");
+  }
+  dbUser.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  dbUser.passwordChangedAt = new Date();
+  dbUser.tokenVersion = (dbUser.tokenVersion ?? 0) + 1;
+  await dbUser.save();
+  await audit({ actor: user._id, actorRole: user.role, action: "auth.password_changed", target: { type: "user", id: user._id } });
+  // A fresh token for this device; every other session is now invalid.
+  return { token: signToken(dbUser), message: "Password changed. Other devices have been signed out." };
+}
+
+export async function changeUsername(user: IUser, value: unknown) {
+  const username = requireUsername(value);
+  if (user.username === username) return user;
+  if (await isUsernameTaken(username, user._id)) throw new AppError(409, "That username is taken");
+  const before = user.username ?? null;
+  user.username = username;
+  user.usernameKey = usernameKey(username);
+  try {
+    await user.save();
+  } catch (err: any) {
+    if (err?.code === 11000) throw new AppError(409, "That username is taken");
+    throw err;
+  }
+  await audit({
+    actor: user._id,
+    actorRole: user.role,
+    action: "user.username_changed",
+    target: { type: "user", id: user._id },
+    before: { username: before },
+    after: { username },
+  });
+  return user;
+}
+
+export async function usernameAvailable(value: unknown, exceptUserId?: unknown) {
+  try {
+    const username = requireUsername(value);
+    return { username, available: !(await isUsernameTaken(username, exceptUserId)) };
+  } catch (err: any) {
+    return { username: typeof value === "string" ? value : "", available: false, reason: err?.message ?? "Invalid username" };
+  }
 }
 
 export async function forgotPassword(email: string) {

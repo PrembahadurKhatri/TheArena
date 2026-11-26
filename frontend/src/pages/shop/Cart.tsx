@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Lock, ShoppingBag, Trash2 } from "lucide-react";
 import { assetUrl } from "@/api/axios";
-import { useCart, purchasable } from "@/context/CartContext";
+import { useCart, purchasable, keyOf } from "@/context/CartContext";
 import type { CartNotice } from "@/context/CartContext";
 import { buttonClass } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/StateBlock";
@@ -85,7 +85,7 @@ export default function Cart() {
                   const soldOut = item.unavailable || item.stock === 0;
                   return (
                     <li
-                      key={item.productId}
+                      key={keyOf(item)}
                       className={`grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-x-4 gap-y-3 py-5 md:grid-cols-[minmax(0,1fr)_9rem_7rem_2.5rem] ${
                         soldOut ? "opacity-60" : ""
                       }`}
@@ -110,7 +110,7 @@ export default function Cart() {
                           >
                             {item.name}
                           </Link>
-                          <p className="text-sm text-ink-faint">{item.storeName}</p>
+                          <p className="text-sm text-ink-faint">{item.variantLabel ? `${item.variantLabel} · ` : ""}{item.storeName}</p>
                           <p className="num mt-1 text-sm text-ink-muted">Rs {item.price} each</p>
                           {soldOut ? (
                             <p className="mt-1 text-sm font-semibold text-danger">
@@ -128,7 +128,7 @@ export default function Cart() {
                             value={item.quantity}
                             max={item.stock}
                             label={item.name}
-                            onChange={(q) => updateQuantity(item.productId, q)}
+                            onChange={(q) => updateQuantity(keyOf(item), q)}
                           />
                         )}
                         <span className="num font-display text-xl font-bold text-ink md:hidden">
@@ -142,7 +142,7 @@ export default function Cart() {
 
                       <button
                         type="button"
-                        onClick={() => removeFromCart(item.productId)}
+                        onClick={() => removeFromCart(keyOf(item))}
                         aria-label={`Remove ${item.name}`}
                         className="col-start-2 flex h-10 w-10 items-center justify-center justify-self-end rounded-full text-ink-faint transition-colors hover:bg-danger/10 hover:text-danger active:bg-danger/20 md:col-start-auto"
                       >

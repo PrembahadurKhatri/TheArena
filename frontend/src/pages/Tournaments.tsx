@@ -77,7 +77,7 @@ function FixtureRow({ t }: { t: TournamentSummary }) {
 
 const STATUS_FILTER_OPTIONS = [
   { value: "", label: "All" },
-  { value: "upcoming", label: "Upcoming" },
+  { value: "open", label: "Taking teams" },
   { value: "ongoing", label: "Ongoing" },
   { value: "completed", label: "Completed" },
 ];

@@ -7,17 +7,27 @@ import { User, IUser } from "../models/User";
 import { AppError } from "../utils/AppError";
 import { isObjectIdString } from "../utils/validation";
 import { isTestPaymentsEnabled } from "../config/env";
-import { cancelOrderAndRestock } from "./ordersService";
+import { cancelOrderAndRestock, markOrderPaid } from "./ordersService";
 import { findBookingConflict } from "./groundBookingsService";
 import { withLock, groundDayLockKey } from "../utils/lock";
 import { audit } from "./auditService";
+import { notify } from "./notificationService";
+import { activateMembershipPayment, activateSubscription, endSubscriptionNow } from "./subscriptionsService";
+import { Subscription } from "../models/Subscription";
+import { PAID_STATUSES } from "../models/Payment";
+import { optionalString, queryString } from "../utils/validation";
+import { Page, pageMeta } from "../utils/pagination";
 
 const PLAN_DURATIONS_MS: Record<MembershipPlan, number> = {
   monthly: 30 * 24 * 60 * 60 * 1000,
   yearly: 365 * 24 * 60 * 60 * 1000,
 };
 
-function getPlanPrice(plan: MembershipPlan): number {
+/** Price of the older monthly/yearly Premium checkout: the plan catalogue's price, else the env setting. */
+async function getPlanPrice(plan: MembershipPlan): Promise<number> {
+  const { Plan } = await import("../models/Plan");
+  const p = await Plan.findOne({ code: plan === "monthly" ? "player_premium_monthly" : "player_premium_yearly", active: true }).lean();
+  if (p && p.price > 0) return p.price;
   const raw = plan === "monthly" ? process.env.MEMBERSHIP_MONTHLY_PRICE : process.env.MEMBERSHIP_YEARLY_PRICE;
   const price = Number(raw);
   if (!price || Number.isNaN(price)) {
@@ -30,7 +40,7 @@ function getPlanPrice(plan: MembershipPlan): number {
  * Payment lifecycle
  * -----------------
  *   checkout  -> Payment { status: "pending" }           (amount always computed server-side)
- *   confirm   -> "pending" -> "success"  (atomic, once)   then fulfil: booking confirmed /
+ *   confirm   -> "pending" -> "paid"     (atomic, once)   then fulfil: booking confirmed /
  *                                                         order paid / membership extended
  *   fail      -> "pending" -> "failed"   (atomic, once)   then release: booking cancelled /
  *                                                         order cancelled + stock restored
@@ -50,6 +60,10 @@ async function verifyWithGateway(payment: IPayment): Promise<boolean> {
       throw new AppError(503, "Online payments are not enabled yet. Please try again later.");
     }
     return true;
+  }
+  if (payment.provider === "MANUAL") {
+    // Money paid outside The Arena: only Finance staff can mark it received.
+    throw new AppError(403, "Manual payments are verified by The Arena's staff after you submit the reference");
   }
   throw new AppError(501, `Payment provider ${payment.provider} is not supported`);
 }
@@ -111,7 +125,7 @@ export async function checkout(
     if (plan !== "monthly" && plan !== "yearly") {
       throw new AppError(400, 'plan must be "monthly" or "yearly"');
     }
-    const amount = getPlanPrice(plan);
+    const amount = await getPlanPrice(plan);
 
     // One open membership checkout per user at a time.
     const existing = await Payment.findOne({ user: user._id, type: "membership", status: "pending", plan });
@@ -168,7 +182,7 @@ async function getOwnedPaymentOrThrow(paymentId: string, user: IUser) {
 // Atomically move a payment out of "pending". Returns null if another
 // request already did — that request owns fulfilment, so nothing is applied
 // twice (no double premium extension, no double booking confirmation).
-async function transitionFromPending(paymentId: Types.ObjectId, status: "success" | "failed") {
+async function transitionFromPending(paymentId: Types.ObjectId, status: "paid" | "failed") {
   return Payment.findOneAndUpdate({ _id: paymentId, status: "pending" }, { $set: { status } }, { new: true });
 }
 
@@ -236,7 +250,7 @@ async function confirmVerified(paymentId: string, payment: IPayment, user: IUser
     throw err;
   }
 
-  const updated = await transitionFromPending(payment._id, "success");
+  const updated = await transitionFromPending(payment._id, "paid");
   if (!updated) {
     throw new AppError(409, "This payment is already being processed");
   }
@@ -247,33 +261,22 @@ async function confirmVerified(paymentId: string, payment: IPayment, user: IUser
       { $set: { status: "confirmed", payment: updated._id } }
     );
   } else if (updated.type === "membership" && updated.plan) {
-    const now = new Date();
-    const duration = PLAN_DURATIONS_MS[updated.plan];
-
-    // Extend from the later of "now" or the user's current expiry, so
-    // renewals stack instead of overwriting remaining time.
-    const dbUser = await User.findById(user._id);
+    // Older monthly/yearly checkout: it becomes a Premium subscription
+    // (renewals stack), with a Membership row kept for history.
+    const dbUser = await User.findById(updated.user);
     if (!dbUser) throw new AppError(404, "User not found");
-
-    const base = dbUser.membershipExpiresAt && dbUser.membershipExpiresAt > now ? dbUser.membershipExpiresAt : now;
-    const expiresAt = new Date(base.getTime() + duration);
-
+    const sub = await activateMembershipPayment(dbUser, updated.plan, updated);
     await Membership.create({
       user: dbUser._id,
       plan: updated.plan,
-      startedAt: now,
-      expiresAt,
+      startedAt: new Date(),
+      expiresAt: sub?.endAt ?? new Date(Date.now() + PLAN_DURATIONS_MS[updated.plan]),
       payment: updated._id,
     });
-
-    dbUser.isPremium = true;
-    dbUser.membershipExpiresAt = expiresAt;
-    await dbUser.save();
-  } else if (updated.type === "shop_order") {
-    await Order.updateOne(
-      { _id: updated.refId, status: "pending_payment" },
-      { $set: { status: "paid", payment: updated._id } }
-    );
+  } else if (updated.type === "subscription" && updated.refId) {
+    await activateSubscription(updated.refId);
+  } else if (updated.type === "shop_order" && updated.refId) {
+    await markOrderPaid(updated.refId, updated._id);
   }
 
   return updated;
@@ -295,7 +298,101 @@ export async function fail(paymentId: string, user: IUser) {
     await GroundBooking.updateOne({ _id: updated.refId, status: "pending_payment" }, { $set: { status: "cancelled" } });
   } else if (updated.type === "shop_order" && updated.refId) {
     await cancelOrderAndRestock(updated.refId);
+  } else if (updated.type === "subscription" && updated.refId) {
+    await Subscription.updateOne({ _id: updated.refId, status: "pending" }, { $set: { status: "cancelled", cancelledAt: new Date(), cancelReason: "Payment failed" } });
   }
 
   return updated;
+}
+
+// ---------------------------------------------------------------- manual payments
+
+/** The payer submits the transaction reference (and optionally a screenshot) for a MANUAL payment. */
+export async function submitManualProof(user: IUser, paymentId: string, input: { reference?: unknown; proofImage?: string | null }) {
+  const payment = await getOwnedPaymentOrThrow(paymentId, user);
+  if (payment.provider !== "MANUAL") throw new AppError(400, "This payment isn't a manual payment");
+  if (payment.status !== "pending") throw new AppError(400, `Payment is already ${payment.status}`);
+  const reference = optionalString(input.reference, "reference", 100);
+  if (!reference || reference.length < 4) throw new AppError(400, "Enter the transaction reference from your bank or wallet");
+  await Payment.updateOne(
+    { _id: payment._id, status: "pending" },
+    { $set: { reference, proofImage: input.proofImage ?? payment.proofImage ?? null, submittedAt: new Date() } }
+  );
+  return Payment.findById(payment._id);
+}
+
+export async function listMyPayments(user: IUser) {
+  return Payment.find({ user: user._id }).sort({ createdAt: -1 }).limit(100);
+}
+
+export async function adminListPayments(query: Record<string, unknown>, p: Page) {
+  const filter: any = {};
+  const status = queryString(query.status);
+  if (status === "awaiting_verification") Object.assign(filter, { status: "pending", provider: "MANUAL", submittedAt: { $ne: null } });
+  else if (status === "paid") filter.status = { $in: PAID_STATUSES };
+  else if (status) filter.status = status;
+  const provider = queryString(query.provider);
+  if (provider) filter.provider = provider;
+  const type = queryString(query.type);
+  if (type) filter.type = type;
+  if (query.refundRequested === "true") Object.assign(filter, { refundRequested: true, status: { $in: PAID_STATUSES } });
+  const [items, total] = await Promise.all([
+    Payment.find(filter).sort({ createdAt: -1 }).skip(p.skip).limit(p.limit).populate("user", "name email phone").populate("verifiedBy", "name"),
+    Payment.countDocuments(filter),
+  ]);
+  return { payments: items, ...pageMeta(p, total) };
+}
+
+async function loadForStaff(id: string) {
+  if (!isObjectIdString(id)) throw new AppError(404, "Payment not found");
+  const payment = await Payment.findById(id);
+  if (!payment) throw new AppError(404, "Payment not found");
+  const owner = await User.findById(payment.user);
+  if (!owner) throw new AppError(404, "The payer's account no longer exists");
+  return { payment, owner };
+}
+
+/** Finance staff confirm a manual payment arrived, which fulfils it. */
+export async function adminVerify(actor: IUser, id: string) {
+  const { payment, owner } = await loadForStaff(id);
+  if (payment.provider !== "MANUAL") throw new AppError(400, "Only manual payments are verified by staff");
+  if (payment.status !== "pending") throw new AppError(400, `Payment is already ${payment.status}`);
+  if (!payment.reference) throw new AppError(400, "The payer hasn't submitted a reference yet");
+  const updated = await confirmVerified(payment._id.toString(), payment, owner);
+  await Payment.updateOne({ _id: payment._id }, { $set: { verifiedBy: actor._id, verifiedAt: new Date() } });
+  await audit({ actor: actor._id, actorRole: actor.role, action: "payment.verified", target: { type: "payment", id: payment._id }, after: { amount: payment.amount, reference: payment.reference } });
+  await notify(owner._id, { type: "payment.status", title: `Your payment of Rs ${payment.amount} was received`, link: "/membership", entity: { type: "payment", id: payment._id } });
+  return Payment.findById(updated._id);
+}
+
+export async function adminReject(actor: IUser, id: string, reasonInput: unknown) {
+  const { payment, owner } = await loadForStaff(id);
+  if (payment.provider !== "MANUAL") throw new AppError(400, "Only manual payments are rejected by staff");
+  const reason = optionalString(reasonInput, "reason", 500);
+  if (!reason) throw new AppError(400, "Tell the payer why");
+  await fail(payment._id.toString(), owner);
+  await Payment.updateOne({ _id: payment._id }, { $set: { rejectionReason: reason, verifiedBy: actor._id, verifiedAt: new Date() } });
+  await audit({ actor: actor._id, actorRole: actor.role, action: "payment.rejected", target: { type: "payment", id: payment._id }, reason });
+  await notify(owner._id, { type: "payment.status", title: `Your payment of Rs ${payment.amount} couldn't be confirmed`, body: reason, link: "/membership", entity: { type: "payment", id: payment._id } });
+  return Payment.findById(payment._id);
+}
+
+/** Mark a paid payment as refunded (money returned outside The Arena). Ends what it paid for. */
+export async function adminRefund(actor: IUser, id: string, noteInput: unknown) {
+  const { payment, owner } = await loadForStaff(id);
+  if (!PAID_STATUSES.includes(payment.status)) throw new AppError(400, "Only paid payments can be refunded");
+  const note = optionalString(noteInput, "note", 500);
+  if (!note) throw new AppError(400, "Add a note (how and when the money was returned)");
+  const res = await Payment.updateOne(
+    { _id: payment._id, status: { $in: PAID_STATUSES } },
+    { $set: { status: "refunded", refundRequested: false, refundedBy: actor._id, refundedAt: new Date(), refundNote: note } }
+  );
+  if (!res.modifiedCount) throw new AppError(409, "This payment changed in the meantime");
+  if (payment.type === "subscription" && payment.refId) await endSubscriptionNow(actor, payment.refId, "Refunded");
+  if (payment.type === "ground_booking" && payment.refId) {
+    await GroundBooking.updateOne({ _id: payment.refId, status: { $in: ["confirmed", "pending_payment"] } }, { $set: { status: "cancelled", cancelReason: "Refunded" } });
+  }
+  await audit({ actor: actor._id, actorRole: actor.role, action: "payment.refunded", target: { type: "payment", id: payment._id }, after: { amount: payment.amount }, reason: note });
+  await notify(owner._id, { type: "payment.status", title: `Rs ${payment.amount} has been refunded`, body: note, entity: { type: "payment", id: payment._id } });
+  return Payment.findById(payment._id);
 }

@@ -9,18 +9,23 @@ import { Ground } from "./models/Ground";
 import { User } from "./models/User";
 import { Store } from "./models/Store";
 import { Product } from "./models/Product";
+import { ensureDefaultStaffRoles } from "./services/staffService";
+import { ensureDefaultPlans } from "./services/subscriptionsService";
 
-const SPORTS: { slug: string; name: string; order: number }[] = [
-  { slug: "cricket", name: "Cricket", order: 1 },
-  { slug: "football", name: "Football", order: 2 },
-  { slug: "tennis", name: "Tennis", order: 3 },
-  { slug: "table-tennis", name: "Table Tennis", order: 4 },
-  { slug: "volleyball", name: "Volleyball", order: 5 },
-  { slug: "hockey", name: "Hockey", order: 6 },
-  { slug: "badminton", name: "Badminton", order: 7 },
-  { slug: "basketball", name: "Basketball", order: 8 },
-  { slug: "kabaddi", name: "Kabaddi", order: 9 },
-  { slug: "futsal", name: "Futsal", order: 10 },
+// minPlayers = smallest roster that can enter a tournament; positions feed
+// player profiles. Applied only to sports that don't have them yet, so admin
+// edits are never overwritten by a re-seed.
+const SPORTS: { slug: string; name: string; order: number; minPlayers: number; maxPlayers: number; positions: string[] }[] = [
+  { slug: "cricket", name: "Cricket", order: 1, minPlayers: 11, maxPlayers: 16, positions: ["Batter", "Bowler", "All-rounder", "Wicket-keeper"] },
+  { slug: "football", name: "Football", order: 2, minPlayers: 11, maxPlayers: 25, positions: ["Goalkeeper", "Defender", "Midfielder", "Forward"] },
+  { slug: "tennis", name: "Tennis", order: 3, minPlayers: 1, maxPlayers: 4, positions: ["Singles", "Doubles"] },
+  { slug: "table-tennis", name: "Table Tennis", order: 4, minPlayers: 1, maxPlayers: 4, positions: ["Singles", "Doubles"] },
+  { slug: "volleyball", name: "Volleyball", order: 5, minPlayers: 6, maxPlayers: 14, positions: ["Setter", "Outside Hitter", "Opposite", "Middle Blocker", "Libero"] },
+  { slug: "hockey", name: "Hockey", order: 6, minPlayers: 11, maxPlayers: 22, positions: ["Goalkeeper", "Defender", "Midfielder", "Forward"] },
+  { slug: "badminton", name: "Badminton", order: 7, minPlayers: 1, maxPlayers: 4, positions: ["Singles", "Doubles", "Mixed Doubles"] },
+  { slug: "basketball", name: "Basketball", order: 8, minPlayers: 5, maxPlayers: 15, positions: ["Point Guard", "Shooting Guard", "Small Forward", "Power Forward", "Center"] },
+  { slug: "kabaddi", name: "Kabaddi", order: 9, minPlayers: 7, maxPlayers: 12, positions: ["Raider", "Defender", "All-rounder"] },
+  { slug: "futsal", name: "Futsal", order: 10, minPlayers: 5, maxPlayers: 14, positions: ["Goalkeeper", "Defender", "Winger", "Pivot"] },
 ];
 
 const GROUNDS: {
@@ -186,8 +191,12 @@ async function seed() {
   for (const s of SPORTS) {
     await Sport.findOneAndUpdate(
       { slug: s.slug },
-      { $set: { name: s.name, order: s.order } },
+      { $set: { name: s.name, order: s.order }, $setOnInsert: { active: true } },
       { upsert: true, new: true }
+    );
+    await Sport.updateOne(
+      { slug: s.slug, $or: [{ positions: { $exists: false } }, { positions: { $size: 0 } }] },
+      { $set: { minPlayers: s.minPlayers, maxPlayers: s.maxPlayers, positions: s.positions } }
     );
   }
   console.log(`[seed] ${SPORTS.length} sports upserted`);
@@ -200,6 +209,8 @@ async function seed() {
         // Insert-only, so re-running the seed keeps any later edits.
         $setOnInsert: {
           sport: g.sport,
+          sports: [g.sport],
+          status: "approved",
           pricePerHour: g.pricePerHour,
           amenities: g.amenities,
           image: null,
@@ -211,6 +222,11 @@ async function seed() {
   console.log(`[seed] ${GROUNDS.length} grounds upserted`);
 
   await seedShop();
+
+  const plans = await ensureDefaultPlans();
+  console.log(`[seed] subscription plans: ${plans} created`);
+  const roles = await ensureDefaultStaffRoles();
+  console.log(`[seed] staff role templates: ${roles} created`);
 
   console.log("[seed] done.");
   await mongoose.disconnect();

@@ -1,6 +1,15 @@
 import { Schema, model, Document, Types } from "mongoose";
 
-export type BookingStatus = "pending_payment" | "confirmed" | "cancelled";
+// pending_payment  – held while the online payment is made (expires after BOOKING_HOLD_MINUTES)
+// confirmed        – paid online
+// confirmed_unpaid – pay at the venue; the slot is held, the owner marks it paid or no-show
+// blocked          – the owner closed the slot (maintenance, private event)
+// completed / no_show – after the slot, set by the owner
+// cancelled        – by the user, the owner, or because the hold expired
+export type BookingStatus = "pending_payment" | "confirmed" | "confirmed_unpaid" | "blocked" | "completed" | "no_show" | "cancelled";
+export const BOOKING_STATUSES: BookingStatus[] = ["pending_payment", "confirmed", "confirmed_unpaid", "blocked", "completed", "no_show", "cancelled"];
+// Statuses that occupy the slot (pending_payment only while its hold lasts).
+export const HOLDING_STATUSES: BookingStatus[] = ["confirmed", "confirmed_unpaid", "blocked"];
 
 export interface IGroundBooking extends Document {
   _id: Types.ObjectId;
@@ -12,6 +21,13 @@ export interface IGroundBooking extends Document {
   totalAmount: number;
   status: BookingStatus;
   payment: Types.ObjectId | null;
+  source: "direct" | "challenge" | "owner";
+  challenge: Types.ObjectId | null;
+  paymentMethod: "online" | "pay_at_venue";
+  cancelledAt: Date | null;
+  cancelledBy: Types.ObjectId | null;
+  cancelReason?: string | null;
+  note?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,8 +40,15 @@ const groundBookingSchema = new Schema<IGroundBooking>(
     startTime: { type: String, required: true },
     endTime: { type: String, required: true },
     totalAmount: { type: Number, required: true },
-    status: { type: String, enum: ["pending_payment", "confirmed", "cancelled"], default: "pending_payment" },
+    status: { type: String, enum: BOOKING_STATUSES, default: "pending_payment" },
     payment: { type: Schema.Types.ObjectId, ref: "Payment", default: null },
+    source: { type: String, enum: ["direct", "challenge", "owner"], default: "direct" },
+    challenge: { type: Schema.Types.ObjectId, ref: "Challenge", default: null },
+    paymentMethod: { type: String, enum: ["online", "pay_at_venue"], default: "online" },
+    cancelledAt: { type: Date, default: null },
+    cancelledBy: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    cancelReason: { type: String, default: null, maxlength: 300 },
+    note: { type: String, trim: true, maxlength: 300 },
   },
   { timestamps: true }
 );

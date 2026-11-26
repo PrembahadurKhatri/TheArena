@@ -14,7 +14,7 @@ cricket, football, tennis, table-tennis, volleyball, hockey, badminton, basketba
 These are defined in `frontend/src/data/sports.ts` (`SPORTS` array — already written, do
 not change the slugs). The backend seeds a `Sport` collection with the same slugs
 (name, slug, order) purely so `GET /api/sports` can drive filter dropdowns — every
-OTHER model (`Team`, `Tournament`, `Ground`, `PlayerRanking`, etc.) stores `sport` as a
+OTHER model (`Team`, `Tournament`, `Ground`, etc.) stores `sport` as a
 **plain lowercase slug string** (not an ObjectId ref), validated against this fixed list.
 This keeps queries simple (`Team.find({ sport: "cricket" })`, no populate needed).
 
@@ -97,7 +97,7 @@ if `req.user.isPremium` is false or `membershipExpiresAt` has passed.
 - `POST /api/tournaments` — auth + **premium required** (`requirePremium` middleware). Body `{ name, sport, maxTeams, startDate, province, description?, location? }` → `201 { tournament }`. `province` is required (one of the 7 provinces); `location` is optional free text (e.g. a venue name).
 - `POST /api/tournaments/:id/register-team` — auth, caller must own the team. Body `{ teamId }` → `200 { tournament }`. 400 if already full or already started.
 - `POST /api/tournaments/:id/start` — organizer only. Generates a single-elimination bracket from registered teams (shuffle, create round-1 `Match` docs with `round: 1`) and sets `status: "ongoing"` → `200 { tournament, matches }`
-- `PATCH /api/tournaments/:id/matches/:matchId` — organizer only. Body `{ scoreA, scoreB, winnerTeamId }`. Marks the match `completed`, and if every match in the current round is complete, auto-generates the next round's matches (`round: currentRound + 1`) pairing winners, until a final winner exists (then `tournament.status = "completed"`, `tournament.winner = teamId`). **Also updates `TeamRanking`/`PlayerRanking` win/loss points for that sport** on every match completion. → `200 { tournament, matches }`
+- `PATCH /api/tournaments/:id/matches/:matchId` — organizer only. Body `{ scoreA, scoreB, winnerTeamId }`. Marks the match `completed`, and if every match in the current round is complete, auto-generates the next round's matches (`round: currentRound + 1`) pairing winners, until a final winner exists (then `tournament.status = "completed"`, `tournament.winner = teamId`). → `200 { tournament, matches }`
 - `GET /api/tournaments/:id/standings` → `200 { standings: [{ team, wins, losses }] }`
 
 `TournamentSummary`: `{ id, name, sport, status, maxTeams, teamsCount, startDate, organizer: { id, name }, province, location? }`
@@ -146,13 +146,6 @@ sandbox confirm step standing in for a live Khalti/eSewa call (no live keys yet)
 Checkout for membership goes through the shared `/api/payments/checkout` + `/confirm`
 flow above with `type: "membership"`.
 
-## Rankings
-
-- `GET /api/rankings/players?sport=<slug>` → `200 { rankings: [{ rank, player: PlayerSummary, points, wins, losses, draws }] }`
-- `GET /api/rankings/teams?sport=<slug>` → `200 { rankings: [{ rank, team: TeamSummary, points, wins, losses, draws }] }`
-
-Rankings are NOT manually editable — they're recomputed/incremented only as a side
-effect of `PATCH /api/tournaments/:id/matches/:matchId` marking a match complete.
 
 ## Shop (multi-vendor marketplace — sports gear)
 
@@ -225,6 +218,86 @@ live `Product` documents.
 `OrderSummary`: `{ id, items: OrderItem[], totalAmount, status, shippingAddress, shippingProvince?, createdAt, payment: PaymentSummary | null }`
 
 `status` values: `pending_payment | paid | cancelled`. An unpaid order is cancelled and its stock restored when its payment fails, or automatically after `ORDER_HOLD_MINUTES` (30).
+
+## Admin API (staff only)
+
+All routes are under `/api/admin`, require `Authorization`, and return 403 to anyone who isn't staff (`role: "admin"`). Permissions are read from the database on every request; the catalogue is in `backend/src/config/permissions.ts`.
+
+- A **Super Admin** holds every permission. Other staff hold their `StaffRole`'s permissions, plus `permissionOverrides.grant`, minus `permissionOverrides.revoke`.
+- `staff.manage` and `settings.manage` are **reserved**: they can't be put in a role or granted, so only Super Admins manage staff.
+- Nobody can change their own staff access or status. The last active Super Admin can't be removed, demoted or blocked. Staff accounts can only be suspended/banned by a Super Admin.
+
+| Route | Needs | Notes |
+|---|---|---|
+| `GET /me/permissions` | any staff | `{ isSuperAdmin, permissions[], catalogue: [{ key, label }] }` |
+| `GET /users?search&status&role&premium&page&limit` | `users.read` | `{ users[], total, page, pages, limit }` |
+| `PATCH /users/:id/status` | `users.suspend` (+ `users.blacklist` to ban or unban) | body `{ status: active|suspended|banned, reason }` (reason required unless active) |
+| `PATCH /users/:id/role` | Super Admin | body `{ role, reason? }`. Promoting gives staff with no permissions; demoting clears all staff fields |
+| `GET /audit-logs?action&actor&targetId&page&limit` | `audit.read` | |
+| `GET /staff?page&limit` | Super Admin | `{ staff: [StaffMember], ...page }` |
+| `POST /staff` | Super Admin | body `{ userId, staffRoleId?, grant?, revoke?, reason? }` → `201 { staff }` |
+| `PATCH /staff/:id` | Super Admin | body `{ staffRoleId?, grant?, revoke?, reason? }` (`staffRoleId: null` removes the role) |
+| `DELETE /staff/:id` | Super Admin | back to player → `{ user }` |
+| `PATCH /staff/:id/super-admin` | Super Admin | body `{ value: boolean, reason? }` |
+| `GET /staff-roles` | Super Admin | `{ roles: [StaffRole & { memberCount }] }` |
+| `POST /staff-roles` | Super Admin | body `{ key, name, description?, permissions[] }` → `201 { role }` |
+| `PATCH /staff-roles/:id` | Super Admin | `key` can't change |
+| `DELETE /staff-roles/:id` | Super Admin | 400 for built-in roles, 409 while assigned |
+
+`StaffMember`: admin user fields + `{ staffRole: { id, key, name } | null, permissionOverrides: { grant[], revoke[] }, effectivePermissions[] }`
+`StaffRole`: `{ id, key, name, description, permissions[], isSystem, createdAt, updatedAt }`
+
+Built-in role templates (editable, not deletable; created by `npm run migrate:rbac`, `npm run seed` and `npm run create-admin`): HR Manager, Tournament Manager, Merchant Manager, Ground Manager, Support Manager, Finance Manager, Content Manager.
+
+## Added in the master-plan phases (docs/MASTER_PLAN.md)
+
+The sections above describe the original endpoints; they still work. Everything below was added since. All list endpoints accept `?page&limit` and return `{ <items>, page, limit, total, pages }`. "Manager" of a team = its owner or captain.
+
+### Accounts, profiles, discovery (Phase 1)
+- `PATCH /api/auth/me` also takes `bio, dateOfBirth, gender, district, municipality, lat, lng, sportProfiles[{sport, position, experienceLevel}], privacy{showEmail, showPhone, showLocation, showAge, discoverable, emailNotifications}`. District decides the province.
+- `PATCH /api/auth/me/password` `{ currentPassword, newPassword }` → `{ token }` (other sessions signed out). `PATCH /api/auth/me/username` `{ username }`. `GET /api/auth/username-available?u=`.
+- Register accepts optional `username` and `district`; a username is generated when omitted (unique, case-insensitive).
+- `/auth/me` includes `entitlements`; staff also get `isSuperAdmin, permissions[]`.
+- `GET /api/players?sport&search&province&district&lat&lng&radiusKm&experience&position&page` — only active, discoverable players; experience/position and radius > 10 km are Premium. `GET /api/players/:idOrUsername` respects privacy. `GET /api/players/:id/stats`, `/matches`.
+- `GET /api/meta/locations` (7 provinces → 77 districts), `/api/meta/profile-options`, `/api/meta/announcements`.
+- `GET /api/notifications?unread&page`, `GET /api/notifications/unread-count`, `POST /api/notifications/:id/read`, `POST /api/notifications/read-all`.
+- `POST /api/reports` `{ targetType: user|team|store|product|review|match|tournament|ground, targetId, reason, details? }`.
+
+### Teams (Phase 2)
+- Team names are unique ignoring case/spacing; teams have `slug`, `description`, `coverImage`, location, `captainId`, `viceCaptainId`, `viewerRole`. `GET /api/teams/:idOrSlug`, `GET /api/teams/name-available?name=`, `GET /api/teams?sport&search&province&district&lat&lng&radiusKm&page`.
+- `POST/PATCH /api/teams` multipart fields `logo`, `cover`. Sport is locked once the team has a match or tournament entry.
+- Join requests: `POST/DELETE /api/teams/:id/join-requests`, `PATCH .../join-requests/:userId {action}` (manager).
+- Invitations: `POST /api/teams/:id/invitations {username|userId}` (manager), `DELETE .../invitations/:userId`, `POST .../invitations/respond {action: accept|decline}`, `GET /api/my/invitations`.
+- `POST /api/teams/:id/leave`, `POST /api/teams/:id/transfer-ownership {userId}`, `PATCH /api/teams/:id/members/:userId/role {role: captain|vice_captain|player}` (owner). `GET /api/teams/:id/stats`, `/matches`.
+
+### Challenges and matches (Phases 3–4)
+- Challenges: statuses `open, pending, countered, accepted, declined, cancelled, completed, expired`; fields `awaiting, viewerSide, counterProposals[], matchId, bookingId, format`. Managers (owner or captain) act for teams.
+- `POST /api/challenges/:id/counter {date, startTime, endTime, groundId?, venueNote?, message?}` (the awaited side; limit from settings). Accepting creates a Match.
+- A ground named on a challenge does not hold the slot. `GET /api/challenges/:id/nearby-grounds?lat&lng&radiusKm`, `POST /api/challenges/:id/book-ground {groundId}` (normal booking flow).
+- Matches: `GET /api/matches?status=upcoming|results|awaiting&sport&source&page`, `GET /api/my/matches`, `GET /api/matches/:id` → `{ match, reports, viewerAuthority, statDefinitions, autoVerifyHours }`.
+- Results: `POST /api/matches/:id/reports {scoreA, scoreB, outcome?, detail?, players?[{user, side, stats}], notes?}`; `POST /api/matches/reports/:rid/confirm | dispute {reason} | withdraw`. Unanswered reports verify after `reportAutoVerifyHours`. Records and stats change only on verification.
+
+### Tournaments (Phase 5)
+- Statuses `open → under_review → approved | rejected → ongoing → completed | cancelled`. Formats `knockout, round_robin, league, group_stage, group_knockout`. Create needs Premium.
+- `POST /api/tournaments/:id/registrations {teamId}` (manager), `PATCH .../registrations/:rid {action: approve|reject}` (organizer), `DELETE .../registrations/:rid`.
+- `POST /api/tournaments/:id/submit-review` — needs ≥ 4 eligible approved teams from ≥ 2 owners besides the organizer. Staff: `GET /api/admin/tournaments`, `POST /api/admin/tournaments/:id/review {decision, note}`.
+- `POST /:id/start` (approved only) generates fixtures; `PATCH /:id/matches/:mid` files the organizer's result report; `PATCH /:id/matches/:mid/schedule`; `POST /:id/cancel {reason}`; `GET /:id` returns `{ tournament, registrations, eligibility, standings, isOrganizer, viewerTeams }`. `GET /api/my/tournaments`.
+
+### Grounds (Phase 6)
+- Grounds have `owner, slug, sports[], images[], openingHours[7], slotMinutes, status (pending|approved|rejected|suspended)`. `GET /api/grounds?sport&district&province&minPrice&maxPrice&lat&lng&radiusKm&sort&page`, `GET /api/grounds/:id/slots?date`.
+- Bookings: `POST /api/ground-bookings {…, paymentMethod: online|pay_at_venue}`, `POST /api/ground-bookings/:id/cancel` (before `bookingCancelCutoffHours`).
+- Owners: `GET/POST /api/owner/grounds`, `PATCH /api/owner/grounds/:id`, `POST /api/owner/grounds/:id/blocks`, `GET /api/owner/bookings`, `POST /api/owner/bookings/:id/action {action: mark_paid|complete|no_show|cancel, reason?}`.
+
+### Shop (Phase 8)
+- Shops apply (`status: pending`) and are approved by staff; products need approval too (`draft, pending_review, active, rejected, archived`). Products have `slug, brand, sku, discountPrice, unitPrice, variants[{id,size,color,sku,stock}], rating`.
+- Orders: `POST /api/shop/orders {items[{productId, variantId?, quantity}], paymentMethod: cod|online, …}` → one SellerOrder per shop. `GET /api/shop/orders/:id`, `POST /api/shop/seller-orders/:id/cancel` (buyer, before shipping), `PATCH /api/shop/seller-orders/:id/status {status, note?, carrier?, trackingCode?}` (merchant).
+- `GET /api/shop/stores/:id/orders` now returns that shop's seller orders only. `GET /api/shop/stores/:id/sales`, `/reviews`. `GET/POST /api/shop/products/:id/reviews` (delivered buyers, once), `POST /api/shop/reviews/:id/reply`. Wishlist: `GET /api/shop/wishlist`, `POST/DELETE /api/shop/wishlist/:productId`. `GET /api/shop/categories`.
+
+### Subscriptions and manual payments (Phase 7 — on hold)
+Built but not exposed in the UI until a gateway is connected: `GET /api/plans`, `POST /api/subscriptions {planCode, subscriberId?, method: manual|test}`, `POST /api/subscriptions/:id/cancel`, `GET /api/my/subscriptions`, `GET /api/my/payments`, `POST /api/payments/:id/manual-proof {reference, proof?}`. Payment status `success` is now `paid`; new statuses `cancelled`, `refunded`.
+
+### More admin endpoints
+Each needs the permission shown (Super Admins hold all): users `GET /users/:id`, `PATCH /users/:id` (users.edit); `GET /blacklist`, `DELETE /blacklist/:id` (users.blacklist); announcements CRUD (announcements.manage); `GET/POST/PATCH /sports`, shop categories (categories.manage); teams list/status/delete (teams.moderate); `GET /match-reports` (reports.verify), `POST /match-reports/:id/resolve {decision: verify|amend|void, note}` (disputes.resolve); grounds review (grounds.review) and create/edit (grounds.manage); merchants (merchants.review); products and review visibility (products.review); `GET /orders` (orders.manage); plans (plans.manage); subscriptions (subscriptions.manage); payments read/verify/reject/refund (payments.*); `GET /overview` (analytics.read); reports (moderation.reports); `GET/PATCH /settings` (Super Admin). The full route→permission table is in `backend/tests/rbac.test.ts`.
 
 ## Error shape
 

@@ -105,7 +105,7 @@ export default function ChallengeCreate() {
     if (!user) return;
     api
       .get("/my/teams")
-      .then(({ data }) => setMyTeams((data.teams ?? []).filter((t: TeamSummary) => t.owner?.id === user.id)))
+      .then(({ data }) => setMyTeams((data.teams ?? []).filter((t: TeamSummary) => t.role === "owner" || t.role === "captain")))
       .catch(() => setMyTeams([]));
   }, [user]);
 

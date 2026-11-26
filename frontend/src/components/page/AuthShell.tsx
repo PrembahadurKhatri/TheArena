@@ -35,7 +35,7 @@ export default function AuthShell({
             <span className="font-display text-2xl font-bold text-ink">The Arena</span>
           </Link>
           <p className="mt-4 max-w-sm text-lg leading-relaxed text-ink-muted">
-            Teams, tournaments, grounds and rankings across 10 sports.
+            Teams, tournaments, grounds and challenges across 10 sports.
           </p>
         </div>
       </div>

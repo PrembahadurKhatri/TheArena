@@ -100,6 +100,9 @@ async function sendToCloudinary(req: Request, _res: Response, next: NextFunction
   const files: UploadedFile[] = [];
   if (req.file) files.push(req.file);
   if (Array.isArray(req.files)) files.push(...req.files);
+  else if (req.files && typeof req.files === "object") {
+    for (const list of Object.values(req.files)) files.push(...(list as UploadedFile[]));
+  }
   try {
     await Promise.all(
       files.map(async (file) => {
@@ -122,10 +125,21 @@ export const upload = {
   array(field: string, maxCount?: number): RequestHandler[] {
     return [parser.array(field, maxCount), sendToCloudinary];
   },
+  /** Several named single-or-multi file fields, e.g. [{ name: "logo", maxCount: 1 }]. */
+  fields(fields: { name: string; maxCount?: number }[]): RequestHandler[] {
+    return [parser.fields(fields), sendToCloudinary];
+  },
 };
 
 /** The URL to store for an uploaded file: Cloudinary's https URL, or /uploads/<file> locally. */
 export function fileUrl(file: Express.Multer.File): string {
   const cloudUrl = (file as UploadedFile).cloudUrl;
   return cloudUrl ?? `/uploads/${file.filename}`;
+}
+
+/** The first uploaded file in a named field from upload.fields(). */
+export function fieldFile(req: Request, name: string): Express.Multer.File | undefined {
+  const files = req.files as Record<string, Express.Multer.File[]> | undefined;
+  if (!files || Array.isArray(files)) return undefined;
+  return files[name]?.[0];
 }

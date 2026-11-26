@@ -6,37 +6,86 @@ export interface ApiUserRef {
   name: string;
 }
 
+export type TeamRole = "owner" | "captain" | "vice_captain" | "player";
+
 export interface TeamSummary {
   id: string;
   name: string;
+  slug?: string | null;
   sport: string;
   logo: string | null;
   memberCount: number;
   owner: ApiUserRef;
+  province?: string | null;
+  district?: string | null;
+  status?: "active" | "suspended";
+  /** Only on /my/teams: the viewer's role in the team. */
+  role?: TeamRole | null;
 }
 
 export interface TeamMember {
   id: string;
   name: string;
+  username?: string | null;
   photo: string | null;
+  role?: TeamRole;
+  isCaptain?: boolean;
+  isViceCaptain?: boolean;
+  invitedAt?: string | null;
 }
 
 export interface TeamDetail extends TeamSummary {
+  description?: string | null;
+  coverImage?: string | null;
+  municipality?: string | null;
+  captainId?: string | null;
+  viceCaptainId?: string | null;
   members: TeamMember[];
+  viewerRole?: TeamRole | null;
+  viewerHasRequested?: boolean;
+  viewerIsInvited?: boolean;
+  /** Owner and captain only. */
   pendingRequests?: TeamMember[];
+  invitations?: TeamMember[];
+  createdAt?: string | null;
+}
+
+export const TEAM_ROLE_LABEL: Record<TeamRole, string> = {
+  owner: "Owner",
+  captain: "Captain",
+  vice_captain: "Vice-captain",
+  player: "Player",
+};
+
+/** Link path for a team: its slug when it has one. */
+export const teamPath = (t: { id: string; slug?: string | null }) => `/teams/${t.slug || t.id}`;
+
+export interface PlayerSportProfile {
+  sport: string;
+  position: string | null;
+  experienceLevel: string | null;
 }
 
 export interface PlayerSummary {
   id: string;
   name: string;
+  username?: string | null;
   photo: string | null;
   sportPreferences: string[];
+  sportProfiles?: PlayerSportProfile[];
   isPremium: boolean;
+  province?: string | null;
+  district?: string | null;
 }
 
 export interface PlayerProfile extends PlayerSummary {
   email?: string;
   phone?: string;
+  bio?: string | null;
+  municipality?: string | null;
+  location?: string | null;
+  age?: number | null;
+  memberSince?: string | null;
 }
 
 export type TournamentStatus = "upcoming" | "ongoing" | "completed";
@@ -73,6 +122,43 @@ export interface TournamentMatch {
   status: "pending" | "completed" | string;
 }
 
+export interface MatchUserRef {
+  id: string;
+  name: string;
+  username: string | null;
+  photo: string | null;
+}
+
+/** A match from /api/matches (challenge or tournament). */
+export interface MatchRow {
+  id: string;
+  source: "tournament" | "challenge";
+  tournament: { id: string; name: string } | string | null;
+  challenge: string | null;
+  sport: string | null;
+  mode: "team" | "player";
+  round: number;
+  stage?: string;
+  group?: string | null;
+  matchNumber?: number | null;
+  teamA: (MatchTeamRef & { slug?: string | null }) | string | null;
+  teamB: (MatchTeamRef & { slug?: string | null }) | string | null;
+  userA: MatchUserRef | string | null;
+  userB: MatchUserRef | string | null;
+  date: string | null;
+  startTime: string | null;
+  endTime: string | null;
+  ground: { id: string; name: string; location: string | null } | null;
+  venueNote: string | null;
+  scoreA: number | null;
+  scoreB: number | null;
+  winner: MatchTeamRef | string | null;
+  winnerUser: MatchUserRef | string | null;
+  isDraw: boolean;
+  status: "pending" | "reported" | "disputed" | "completed" | "cancelled";
+  verifiedAt: string | null;
+}
+
 export interface TournamentDetail extends TournamentSummary {
   teams: TeamSummary[];
   matches: TournamentMatch[];
@@ -82,7 +168,12 @@ export interface TournamentDetail extends TournamentSummary {
 export interface GroundSummary {
   id: string;
   name: string;
+  slug?: string | null;
   sport: string;
+  sports?: string[];
+  province?: string | null;
+  district?: string | null;
+  status?: string;
   location: string;
   pricePerHour: number;
   image: string | null;
@@ -115,16 +206,6 @@ export interface BookingSummary {
   totalAmount: number;
   status: BookingStatus;
   payment: PaymentSummary | null;
-}
-
-export interface RankingEntry<T> {
-  rank: number;
-  points: number;
-  wins: number;
-  losses: number;
-  draws: number;
-  player?: PlayerSummary;
-  team?: TeamSummary;
 }
 
 export interface SportRow {
@@ -162,18 +243,39 @@ export interface StoreDetail extends StoreSummary {
   products: ProductSummary[];
 }
 
+export interface ProductVariant {
+  id: string;
+  sku: string | null;
+  size: string | null;
+  color: string | null;
+  stock: number;
+}
+
 export interface ProductSummary {
   id: string;
   name: string;
+  slug?: string | null;
+  brand?: string | null;
   price: number;
+  /** Sale price when the product is discounted. */
+  discountPrice?: number | null;
+  /** What a buyer pays per unit. */
+  unitPrice?: number;
   stock: number;
   images: string[];
   category: string;
   sport?: string;
-  store: { id: string; name: string };
+  status?: string;
+  featured?: boolean;
+  rating?: { avg: number; count: number };
+  hasVariants?: boolean;
+  store: { id: string; name: string; slug?: string | null };
 }
 
 export interface ProductDetail extends ProductSummary {
+  sku?: string | null;
+  variants?: ProductVariant[];
+  review?: { note: string | null; at: string } | null;
   description?: string;
 }
 
@@ -207,7 +309,19 @@ export function apiError(err: unknown, fallback = "Something went wrong. Please 
 }
 
 export type ChallengeMode = "team" | "player";
-export type ChallengeStatus = "open" | "pending" | "accepted" | "declined" | "cancelled";
+export type ChallengeStatus = "open" | "pending" | "countered" | "accepted" | "declined" | "cancelled" | "completed" | "expired";
+
+export interface CounterProposal {
+  side: "challenger" | "opponent";
+  by: string | null;
+  date: string;
+  startTime: string;
+  endTime: string;
+  ground: GroundSummary | null;
+  venueNote: string | null;
+  message: string | null;
+  createdAt: string;
+}
 
 export interface ChallengeSide {
   kind: "team" | "player";
@@ -224,6 +338,14 @@ export interface Challenge {
   sport: string;
   mode: ChallengeMode;
   status: ChallengeStatus;
+  format?: "friendly" | "competitive";
+  /** Whose answer the challenge is waiting for (pending/countered). */
+  awaiting?: "challenger" | "opponent" | null;
+  /** Which side the signed-in viewer speaks for, from the server. */
+  viewerSide?: "challenger" | "opponent" | null;
+  counterProposals?: CounterProposal[];
+  matchId?: string | null;
+  bookingId?: string | null;
   date: string;
   startTime: string;
   endTime: string;

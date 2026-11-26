@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
+import ReportButton from "@/components/ReportButton";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Crown, Mail, Phone } from "lucide-react";
+import { ArrowLeft, CalendarDays, Crown, Mail, MapPin, Phone } from "lucide-react";
 import api, { assetUrl } from "@/api/axios";
 import type { PlayerProfile } from "@/types";
 import { apiError } from "@/types";
 import { getSportBySlug } from "@/data/sports";
 import { Loading, ErrorState } from "@/components/ui/StateBlock";
 import { Initials } from "@/components/ui/SportMark";
+import StatsPanel from "@/components/StatsPanel";
 
 export default function PlayerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -52,6 +54,25 @@ export default function PlayerDetail() {
               </p>
             )}
             <h1 className="mt-4 font-display text-6xl font-bold leading-[0.92] text-ink md:text-8xl">{player.name}</h1>
+            {player.username && <p className="mt-3 text-lg text-ink-muted">@{player.username}</p>}
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink-muted">
+              {(player.municipality || player.district || player.province) && (
+                <span className="flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-ink-faint" />
+                  {[player.municipality, player.district, player.province].filter(Boolean).join(", ")}
+                </span>
+              )}
+              {player.age != null && <span>{player.age} years old</span>}
+              {player.memberSince && (
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="h-4 w-4 text-ink-faint" /> Joined {new Date(player.memberSince).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+                </span>
+              )}
+            </div>
+            {player.bio && <p className="mt-6 max-w-xl whitespace-pre-line text-ink-muted">{player.bio}</p>}
+            <div className="mt-6">
+              <ReportButton targetType="user" targetId={player.id} />
+            </div>
 
             {(player.email || player.phone) && (
               <div className="mt-8 flex flex-wrap gap-3">
@@ -83,6 +104,7 @@ export default function PlayerDetail() {
           <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,14rem),1fr))] gap-4">
             {sports.map((slug) => {
               const s = getSportBySlug(slug);
+              const profile = player.sportProfiles?.find((p) => p.sport === slug);
               return (
                 <li key={slug}>
                   <Link
@@ -93,7 +115,14 @@ export default function PlayerDetail() {
                       <img src={s.image} alt="" loading="lazy" className="absolute inset-0 h-full w-full object-cover opacity-70" />
                     )}
                     <span className="photo-veil-bottom absolute inset-0" />
-                    <span className="relative p-4 font-display text-2xl font-bold text-ink">{s?.name ?? slug}</span>
+                    <span className="relative p-4">
+                      <span className="block font-display text-2xl font-bold text-ink">{s?.name ?? slug}</span>
+                      {(profile?.position || profile?.experienceLevel) && (
+                        <span className="mt-1 block text-sm capitalize text-ink-muted">
+                          {[profile.position, profile.experienceLevel].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 </li>
               );
@@ -103,6 +132,7 @@ export default function PlayerDetail() {
           <p className="mt-4 text-sm text-ink-faint">No sport preferences listed.</p>
         )}
       </section>
+      <StatsPanel kind="players" id={player.id} />
     </main>
   );
 }

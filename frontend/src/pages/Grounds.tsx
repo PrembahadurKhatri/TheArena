@@ -9,13 +9,14 @@ import { Loading, ErrorState, EmptyState } from "@/components/ui/StateBlock";
 import { Input } from "@/components/ui/Field";
 import CustomSelect from "@/components/ui/CustomSelect";
 import PageHero from "@/components/page/PageHero";
+import { districtOptions } from "@/data/locations";
 
 function GroundCard({ ground }: { ground: GroundSummary }) {
   const sport = getSportBySlug(ground.sport);
   const photo = ground.image ? assetUrl(ground.image) : sport?.image;
 
   return (
-    <Link to={`/grounds/${ground.id}`} className="panel card-lift group flex h-full flex-col overflow-hidden">
+    <Link to={`/grounds/${ground.slug || ground.id}`} className="panel card-lift group flex h-full flex-col overflow-hidden">
       <div className="relative aspect-[4/3] overflow-hidden bg-surface-2">
         {photo && (
           <img
@@ -52,6 +53,8 @@ export default function Grounds() {
 
   const sport = params.get("sport") ?? "";
   const search = params.get("search") ?? "";
+  const district = params.get("district") ?? "";
+  const maxPrice = params.get("maxPrice") ?? "";
   const [searchInput, setSearchInput] = useState(search);
 
   useEffect(() => {
@@ -59,14 +62,14 @@ export default function Grounds() {
     setLoading(true);
     setError("");
     api
-      .get("/grounds", { params: { sport: sport || undefined, search: search || undefined } })
+      .get("/grounds", { params: { sport: sport || undefined, search: search || undefined, district: district || undefined, maxPrice: maxPrice || undefined, limit: 60 } })
       .then(({ data }) => alive && setGrounds(data.grounds ?? []))
       .catch((err) => alive && setError(apiError(err, "Could not load grounds.")))
       .finally(() => alive && setLoading(false));
     return () => {
       alive = false;
     };
-  }, [sport, search]);
+  }, [sport, search, district, maxPrice]);
 
   function updateParam(key: string, value: string) {
     const next = new URLSearchParams(params);
@@ -108,6 +111,27 @@ export default function Grounds() {
             options={SPORT_FILTER_OPTIONS}
             className="sm:w-60"
           />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <select aria-label="District" className="rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink" value={district} onChange={(e) => updateParam("district", e.target.value)}>
+            <option value="">All districts</option>
+            {districtOptions().map((d) => (
+              <option key={d.value} value={d.value}>
+                {d.label}
+              </option>
+            ))}
+          </select>
+          <select aria-label="Price" className="rounded-full border border-border bg-surface px-4 py-2 text-sm text-ink" value={maxPrice} onChange={(e) => updateParam("maxPrice", e.target.value)}>
+            <option value="">Any price</option>
+            {[500, 1000, 1500, 2500, 4000].map((p) => (
+              <option key={p} value={p}>
+                Up to Rs {p}/h
+              </option>
+            ))}
+          </select>
+          <Link to="/owner" className="rounded-full border border-border px-4 py-2 text-sm text-ink-muted hover:text-ink">
+            Own a ground? List it
+          </Link>
         </div>
       </PageHero>
 

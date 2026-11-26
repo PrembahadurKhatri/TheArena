@@ -5,6 +5,9 @@ import { Server } from "http";
 import app from "./app";
 import { connectDB, disconnectDB } from "./config/db";
 import { validateEnv } from "./config/env";
+import { loadSportRegistry } from "./utils/sports";
+import { loadShopCategories } from "./utils/shopCategories";
+import { loadSettings } from "./services/settingsService";
 import { startExpirySweeper, stopExpirySweeper } from "./services/expiryService";
 
 const PORT = Number(process.env.PORT) || 5050;
@@ -16,6 +19,9 @@ let shuttingDown = false;
 async function start() {
   validateEnv();
   await connectDB();
+  await loadSportRegistry();
+  await loadShopCategories();
+  await loadSettings();
   server = app.listen(PORT, HOST, () => {
     console.log(`[server] The Arena API listening on ${HOST}:${PORT} (${process.env.NODE_ENV ?? "development"})`);
   });

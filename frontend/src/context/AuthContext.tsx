@@ -2,17 +2,63 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import api, { SESSION_ENDED_EVENT } from "@/api/axios";
 
+export interface SportProfile {
+  sport: string;
+  position: string | null;
+  experienceLevel: "beginner" | "intermediate" | "advanced" | "professional" | null;
+}
+
+export interface Privacy {
+  showEmail: boolean;
+  showPhone: boolean;
+  showLocation: boolean;
+  showAge: boolean;
+  discoverable: boolean;
+  emailNotifications: boolean;
+}
+
+export interface Entitlements {
+  plan: "free" | "premium";
+  maxOwnedTeams: number | null; // null = unlimited
+  advancedMatchmaking: boolean;
+  maxSearchRadiusKm: number;
+  advancedStats: boolean;
+  profileBadge: boolean;
+  bookingDiscountPct: number;
+  canOrganizeTournaments: boolean;
+}
+
 export interface ArenaUser {
   id: string;
   name: string;
+  username: string | null;
   email: string;
   phone?: string;
   photo?: string;
   location?: string;
   province?: string;
+  district?: string;
+  municipality?: string;
+  hasGeo?: boolean;
+  bio?: string;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  sportProfiles?: SportProfile[];
+  sportPreferences?: string[];
+  privacy?: Privacy;
   isPremium: boolean;
   membershipExpiresAt?: string | null;
   role: "player" | "admin";
+  entitlements?: Entitlements;
+  // Staff only. For showing the right screens; the server checks every action.
+  isSuperAdmin?: boolean;
+  permissions?: string[];
+}
+
+/** True when the signed-in user holds this staff permission (Super Admins hold all). */
+export function can(user: ArenaUser | null, permission: string) {
+  if (!user || user.role !== "admin") return false;
+  return !!user.isSuperAdmin || !!user.permissions?.includes(permission);
 }
 
 interface AuthContextValue {
@@ -31,6 +77,8 @@ interface AuthContextValue {
   /** Revoke every session of this account (all devices), then sign out here. */
   logoutAll: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  /** Replace the stored token (e.g. after a password change) and reload the user. */
+  setToken: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -101,8 +149,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  async function setToken(token: string) {
+    localStorage.setItem("arena_token", token);
+    await refreshUser();
+  }
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout, logoutAll, refreshUser }),
+    () => ({ user, loading, login, register, logout, logoutAll, refreshUser, setToken }),
     [user, loading]
   );
 

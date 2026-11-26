@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ReportButton from "@/components/ReportButton";
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, Store as StoreIcon } from "lucide-react";
 import api, { assetUrl } from "@/api/axios";
@@ -45,6 +46,9 @@ export default function StoreDetail() {
             <div className="min-w-0">
               <h1 className="font-display text-5xl font-bold leading-[0.95] text-ink md:text-7xl">{store.name}</h1>
               {store.description && <p className="mt-3 max-w-xl text-lg text-ink-muted">{store.description}</p>}
+              <div className="mt-3">
+                <ReportButton targetType="store" targetId={store.id} />
+              </div>
             </div>
           </div>
           <dl className="mt-8 flex flex-wrap gap-x-12 gap-y-3 border-t border-border pt-6">

@@ -15,6 +15,7 @@ process.env.MEMBERSHIP_MONTHLY_PRICE = "299";
 process.env.MEMBERSHIP_YEARLY_PRICE = "2999";
 process.env.RATE_LIMIT_MAX = "100000";
 process.env.AUTH_RATE_LIMIT_MAX = "100000";
+process.env.ACTION_RATE_LIMIT_MAX = "100000";
 for (const key of ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET", "SMTP_HOST", "PAYMENT_MODE", "MONGO_URI"]) {
   delete process.env[key];
 }

@@ -11,7 +11,12 @@ import type { ProductDetail, ProductSummary } from "@/types";
 // cart and checkout pages show what the server will actually charge.
 
 export interface CartItem {
+  /** Line key: the product id, or "productId:variantId" for a size/colour. Older saved carts have none. */
+  key?: string;
   productId: string;
+  variantId?: string | null;
+  /** e.g. "M / Blue" */
+  variantLabel?: string | null;
   name: string;
   price: number;
   image: string | null;
@@ -33,7 +38,7 @@ interface CartContextValue {
   items: CartItem[];
   subtotal: number;
   itemCount: number;
-  addToCart: (product: ProductSummary, qty?: number) => void;
+  addToCart: (product: ProductSummary, qty?: number, variant?: CartVariant) => void;
   removeFromCart: (productId: string) => void;
   updateQuantity: (productId: string, qty: number) => void;
   quantityOf: (productId: string) => number;
@@ -61,6 +66,17 @@ function loadCart(): CartItem[] {
 
 const capOf = (stock?: number) => (stock === undefined ? Infinity : Math.max(stock, 0));
 
+/** The cart line key for an item. */
+export const keyOf = (i: Pick<CartItem, "key" | "productId">) => i.key ?? i.productId;
+
+export interface CartVariant {
+  id: string;
+  label: string;
+  stock: number;
+}
+
+const priceOf = (p: { price: number; unitPrice?: number }) => p.unitPrice ?? p.price;
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(() => loadCart());
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -84,43 +100,46 @@ export function CartProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
-  const addToCart = useCallback((product: ProductSummary, qty = 1) => {
-    if (product.stock <= 0) return;
+  const addToCart = useCallback((product: ProductSummary, qty = 1, variant?: CartVariant) => {
+    const stock = variant ? variant.stock : product.stock;
+    if (stock <= 0) return;
+    const key = variant ? `${product.id}:${variant.id}` : product.id;
     setItems((prev) => {
-      const cap = capOf(product.stock);
-      const existing = prev.find((i) => i.productId === product.id);
+      const cap = capOf(stock);
+      const existing = prev.find((i) => keyOf(i) === key);
       if (existing) {
         const nextQty = Math.min(existing.quantity + qty, cap);
-        return prev.map((i) =>
-          i.productId === product.id ? { ...i, quantity: nextQty, stock: product.stock, price: product.price } : i
-        );
+        return prev.map((i) => (keyOf(i) === key ? { ...i, quantity: nextQty, stock, price: priceOf(product) } : i));
       }
       return [
         ...prev,
         {
+          key,
           productId: product.id,
+          variantId: variant?.id ?? null,
+          variantLabel: variant?.label ?? null,
           name: product.name,
-          price: product.price,
+          price: priceOf(product),
           image: product.images?.[0] ?? null,
           storeId: product.store.id,
           storeName: product.store.name,
           quantity: Math.min(qty, cap),
-          stock: product.stock,
+          stock,
         },
       ];
     });
-    setLastAdded(product.id);
+    setLastAdded(key);
   }, []);
 
-  const removeFromCart = useCallback((productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
+  const removeFromCart = useCallback((key: string) => {
+    setItems((prev) => prev.filter((i) => keyOf(i) !== key));
   }, []);
 
-  const updateQuantity = useCallback((productId: string, qty: number) => {
+  const updateQuantity = useCallback((key: string, qty: number) => {
     setItems((prev) =>
       qty <= 0
-        ? prev.filter((i) => i.productId !== productId)
-        : prev.map((i) => (i.productId === productId ? { ...i, quantity: Math.min(qty, capOf(i.stock)) } : i))
+        ? prev.filter((i) => keyOf(i) !== key)
+        : prev.map((i) => (keyOf(i) === key ? { ...i, quantity: Math.min(qty, capOf(i.stock)) } : i))
     );
   }, []);
 
@@ -152,22 +171,29 @@ export function CartProvider({ children }: { children: ReactNode }) {
           return item;
         }
         const p = r.product;
-        let quantity = item.quantity;
-        if (p.stock <= 0) {
-          notices.push({ productId: item.productId, message: `${p.name} just sold out.` });
-        } else if (quantity > p.stock) {
-          quantity = p.stock;
-          notices.push({ productId: item.productId, message: `Only ${p.stock} of ${p.name} left, so we lowered your quantity.` });
+        const variant = item.variantId ? p.variants?.find((v) => v.id === item.variantId) : undefined;
+        if (item.variantId && !variant) {
+          notices.push({ productId: item.productId, message: `That option of ${p.name} is no longer sold.` });
+          return { ...item, unavailable: true };
         }
-        if (p.price !== item.price) {
-          notices.push({ productId: item.productId, message: `${p.name} is now Rs ${p.price}.` });
+        const stock = variant ? variant.stock : p.stock;
+        const price = priceOf(p);
+        let quantity = item.quantity;
+        if (stock <= 0) {
+          notices.push({ productId: item.productId, message: `${p.name} just sold out.` });
+        } else if (quantity > stock) {
+          quantity = stock;
+          notices.push({ productId: item.productId, message: `Only ${stock} of ${p.name} left, so we lowered your quantity.` });
+        }
+        if (price !== item.price) {
+          notices.push({ productId: item.productId, message: `${p.name} is now Rs ${price}.` });
         }
         return {
           ...item,
           name: p.name,
-          price: p.price,
+          price,
           image: p.images?.[0] ?? null,
-          stock: p.stock,
+          stock,
           quantity,
           unavailable: false,
         };
@@ -182,7 +208,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
   const itemCount = useMemo(() => items.reduce((sum, i) => sum + i.quantity, 0), [items]);
   const quantityOf = useCallback(
-    (productId: string) => items.find((i) => i.productId === productId)?.quantity ?? 0,
+    (key: string) => items.find((i) => keyOf(i) === key)?.quantity ?? 0,
     [items]
   );
 

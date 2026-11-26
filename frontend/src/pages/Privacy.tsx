@@ -7,7 +7,7 @@ const SECTIONS = [
   },
   {
     title: "How we use it",
-    text: "Your information powers your profile, team memberships, tournament registrations, bookings and rankings. We never sell your data to third parties.",
+    text: "Your information powers your profile, team memberships, tournament registrations and bookings. We never sell your data to third parties.",
   },
   {
     title: "Cookies & storage",

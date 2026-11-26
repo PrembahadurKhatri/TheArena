@@ -1,10 +1,10 @@
-// Create the first platform admin, or promote an existing account.
+// Create a Super Admin (full platform access), or promote an existing account.
 //
 //   ADMIN_EMAIL=you@example.com ADMIN_PASSWORD='a long passphrase' ADMIN_NAME='Your Name' npm run create-admin
 //   (production: npm run build && ... npm run create-admin:prod)
 //
 // - If no account has ADMIN_EMAIL, one is created with ADMIN_PASSWORD.
-// - If it exists, it's promoted to admin and reactivated; its password is
+// - If it exists, it's promoted to Super Admin and reactivated; its password is
 //   left alone unless ADMIN_RESET_PASSWORD=true.
 // The password is read from the environment only — never pass it on a shared
 // machine's command history, and never commit it.
@@ -17,6 +17,7 @@ import { connectDB } from "../config/db";
 import { User } from "../models/User";
 import { audit } from "../services/auditService";
 import { requireEmail } from "../utils/validation";
+import { ensureDefaultStaffRoles } from "../services/staffService";
 
 const MIN_ADMIN_PASSWORD = 12;
 
@@ -27,6 +28,7 @@ async function main() {
   const resetPassword = process.env.ADMIN_RESET_PASSWORD === "true";
 
   await connectDB();
+  await ensureDefaultStaffRoles();
   const existing = await User.findOne({ email });
 
   if (!existing || resetPassword) {
@@ -41,15 +43,16 @@ async function main() {
       email,
       passwordHash: await bcrypt.hash(password, 12),
       role: "admin",
+      isSuperAdmin: true,
       status: "active",
     });
-    await audit({ actor: null, action: "user.admin_created", target: { type: "user", id: user._id }, after: { email, role: "admin" } });
-    console.log(`[create-admin] created admin ${email}`);
+    await audit({ actor: null, action: "user.admin_created", target: { type: "user", id: user._id }, after: { email, role: "admin", isSuperAdmin: true } });
+    console.log(`[create-admin] created Super Admin ${email}`);
     return;
   }
 
-  const before = { role: existing.role, status: existing.status };
-  const update: any = { $set: { role: "admin", status: "active", statusReason: null } };
+  const before = { role: existing.role, isSuperAdmin: !!existing.isSuperAdmin, status: existing.status };
+  const update: any = { $set: { role: "admin", isSuperAdmin: true, status: "active", statusReason: null } };
   if (resetPassword) {
     update.$set.passwordHash = await bcrypt.hash(password, 12);
     update.$inc = { tokenVersion: 1 };
@@ -60,10 +63,10 @@ async function main() {
     action: "user.role_changed",
     target: { type: "user", id: existing._id },
     before,
-    after: { role: "admin", status: "active", passwordReset: resetPassword },
+    after: { role: "admin", isSuperAdmin: true, status: "active", passwordReset: resetPassword },
     reason: "create-admin script",
   });
-  console.log(`[create-admin] ${email} is now an admin${resetPassword ? " (password reset)" : ""}`);
+  console.log(`[create-admin] ${email} is now a Super Admin${resetPassword ? " (password reset)" : ""}`);
 }
 
 main()

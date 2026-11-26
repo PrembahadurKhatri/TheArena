@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ImagePlus, LogIn, Users } from "lucide-react";
@@ -7,7 +7,9 @@ import { compressImage } from "@/api/images";
 import { useAuth } from "@/context/AuthContext";
 import { SPORTS, getSportBySlug } from "@/data/sports";
 import { apiError } from "@/types";
-import { Input } from "@/components/ui/Field";
+import { Input, Select, Textarea } from "@/components/ui/Field";
+import { PROVINCES } from "@/data/provinces";
+import { districtOptions } from "@/data/locations";
 import Button, { buttonClass } from "@/components/ui/Button";
 import SportPicker from "@/components/page/SportPicker";
 import SportMark from "@/components/ui/SportMark";
@@ -23,6 +25,23 @@ export default function TeamCreate() {
   const [preview, setPreview] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [description, setDescription] = useState("");
+  const [province, setProvince] = useState(user?.province ?? "");
+  const [district, setDistrict] = useState(user?.district ?? "");
+  const [nameTaken, setNameTaken] = useState(false);
+
+  // Team names are unique (any capitalisation): check as the user types.
+  useEffect(() => {
+    setNameTaken(false);
+    if (name.trim().length < 2) return;
+    const t = setTimeout(() => {
+      api
+        .get("/teams/name-available", { params: { name } })
+        .then(({ data }) => setNameTaken(!data.available))
+        .catch(() => undefined);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [name]);
 
   function onLogoChange(file: File | null) {
     setLogo(file);
@@ -37,11 +56,14 @@ export default function TeamCreate() {
       const form = new FormData();
       form.append("name", name);
       form.append("sport", sport);
+      form.append("description", description);
+      form.append("province", province);
+      form.append("district", district);
       if (logo) form.append("logo", await compressImage(logo));
       const { data } = await api.post("/teams", form, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      navigate(`/teams/${data.team.id}`);
+      navigate(`/teams/${data.team.slug || data.team.id}`);
     } catch (err) {
       setError(apiError(err, "Could not create team."));
     } finally {
@@ -82,9 +104,29 @@ export default function TeamCreate() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Kathmandu Kings"
+              maxLength={60}
+              error={nameTaken ? "A team with this name already exists" : undefined}
+              hint="Unique across The Arena."
             />
 
             <SportPicker value={sport} onChange={setSport} />
+
+            <Textarea label="About the team" value={description} onChange={(e) => setDescription(e.target.value)} maxLength={1000} placeholder="Where you play, when you train, who you're looking for." />
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Select label="Province" value={province} onChange={(e) => { setProvince(e.target.value); setDistrict(""); }}>
+                <option value="">Not set</option>
+                {PROVINCES.map((p) => (
+                  <option key={p}>{p}</option>
+                ))}
+              </Select>
+              <Select label="District" value={district} onChange={(e) => setDistrict(e.target.value)} hint="Helps nearby players and teams find you.">
+                <option value="">Not set</option>
+                {districtOptions(province || undefined).map((d) => (
+                  <option key={d.value}>{d.value}</option>
+                ))}
+              </Select>
+            </div>
 
             <div className="flex flex-col gap-2">
               <span className="text-sm font-medium text-ink-muted">Team logo</span>
@@ -114,7 +156,7 @@ export default function TeamCreate() {
             </div>
 
             {error && <FormError>{error}</FormError>}
-            <Button type="submit" loading={loading} size="lg" className="self-start">
+            <Button type="submit" loading={loading} disabled={nameTaken} size="lg" className="self-start">
               Create team
             </Button>
           </form>

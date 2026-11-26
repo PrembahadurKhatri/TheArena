@@ -6,7 +6,6 @@ const EXPLORE = [
   { to: "/players", label: "Players" },
   { to: "/tournaments", label: "Tournaments" },
   { to: "/grounds", label: "Grounds" },
-  { to: "/rankings", label: "Rankings" },
 ];
 
 const COMPANY = [
@@ -34,7 +33,7 @@ export default function Footer() {
               </span>
             </Link>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-ink-muted">
-              Find teams, join tournaments, book grounds, and climb the rankings across 10 sports — one platform
+              Find teams, join tournaments, book grounds and challenge rivals across 10 sports — one platform
               for every player.
             </p>
             <div className="mt-5 flex gap-3">

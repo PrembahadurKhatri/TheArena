@@ -61,10 +61,20 @@ export default function ProductCard({ product }: { product: ProductSummary; inde
           <StoreIcon className="h-3.5 w-3.5" /> {product.store.name}
         </Link>
 
-        <p className="num mt-auto pt-3 font-display text-2xl font-bold text-ink">Rs {product.price}</p>
+        <p className="num mt-auto pt-3 font-display text-2xl font-bold text-ink">
+          Rs {product.unitPrice ?? product.price}
+          {product.discountPrice != null && <span className="ml-2 text-sm font-normal text-ink-faint line-through">Rs {product.price}</span>}
+        </p>
 
         <div className="mt-3">
-          {outOfStock ? (
+          {product.hasVariants && !outOfStock ? (
+            <Link
+              to={`/shop/products/${product.slug || product.id}`}
+              className="inline-flex h-10 w-full items-center justify-center rounded-full border border-accent/40 text-sm font-semibold text-accent hover:bg-accent-soft"
+            >
+              Choose options
+            </Link>
+          ) : outOfStock ? (
             <span className="flex h-10 w-full items-center justify-center rounded-full bg-surface-2 text-sm font-semibold text-ink-faint">
               Out of stock
             </span>

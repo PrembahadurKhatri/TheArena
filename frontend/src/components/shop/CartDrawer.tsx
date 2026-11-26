@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { CheckCircle2, ShoppingBag, X } from "lucide-react";
-import { useCart, purchasable } from "@/context/CartContext";
+import { useCart, purchasable, keyOf } from "@/context/CartContext";
 import { assetUrl } from "@/api/axios";
 import { buttonClass } from "@/components/ui/Button";
 import QuantityStepper from "./QuantityStepper";
@@ -92,7 +92,7 @@ export default function CartDrawer() {
             ) : (
               <ul className="flex-1 divide-y divide-border overflow-y-auto">
                 {items.map((item) => (
-                  <li key={item.productId} className="flex gap-4 px-5 py-4">
+                  <li key={keyOf(item)} className="flex gap-4 px-5 py-4">
                     <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-surface-2">
                       {item.image ? (
                         <img src={assetUrl(item.image)} alt="" className="h-full w-full object-cover" />
@@ -112,15 +112,15 @@ export default function CartDrawer() {
                         </Link>
                         <span className="num shrink-0 font-semibold text-ink">Rs {item.price * item.quantity}</span>
                       </div>
-                      <p className="text-sm text-ink-faint">{item.storeName}</p>
+                      <p className="text-sm text-ink-faint">{item.variantLabel ? `${item.variantLabel} · ` : ""}{item.storeName}</p>
                       <div className="mt-auto flex items-center justify-between gap-3 pt-2">
                         <QuantityStepper
                           size="sm"
                           value={item.quantity}
                           max={item.stock}
                           label={item.name}
-                          onChange={(q) => updateQuantity(item.productId, q)}
-                          onRemove={() => removeFromCart(item.productId)}
+                          onChange={(q) => updateQuantity(keyOf(item), q)}
+                          onRemove={() => removeFromCart(keyOf(item))}
                         />
                         <span className="num text-xs text-ink-faint">Rs {item.price} each</span>
                       </div>

@@ -10,16 +10,24 @@ export function otherSide(c: Challenge): ChallengeSide | null {
 }
 
 export function isChallenger(c: Challenge, user: ArenaUser | null) {
-  return !!user && c.challengerUserId === user.id;
+  return !!user && (c.viewerSide === "challenger" || c.challengerUserId === user.id);
 }
 
-/** True when a pending challenge is waiting on this user to answer. */
+/** True when a pending or countered challenge is waiting on this user to answer. */
 export function isTarget(c: Challenge, user: ArenaUser | null) {
-  return !!user && c.status === "pending" && !!c.opponent && c.opponent.ownerId === user.id;
+  return !!user && (c.status === "pending" || c.status === "countered") && !!c.viewerSide && c.viewerSide === c.awaiting;
 }
 
 export function isParticipant(c: Challenge, user: ArenaUser | null) {
-  return isChallenger(c, user) || (!!user && c.acceptedByUserId === user.id) || isTarget(c, user);
+  return !!user && (!!c.viewerSide || c.challengerUserId === user.id || c.acceptedByUserId === user.id);
+}
+
+/** The terms currently on the table: the latest counter-proposal, or the original. */
+export function currentTerms(c: Challenge) {
+  const last = c.status === "countered" ? c.counterProposals?.[c.counterProposals.length - 1] : undefined;
+  return last
+    ? { date: last.date, startTime: last.startTime, endTime: last.endTime, ground: last.ground, venueNote: last.venueNote ?? undefined }
+    : { date: c.date, startTime: c.startTime, endTime: c.endTime, ground: c.ground, venueNote: c.venueNote };
 }
 
 export function isPast(c: Challenge) {
@@ -46,21 +54,27 @@ export function venueOf(c: Challenge) {
 const STATUS_STYLES: Record<string, string> = {
   open: "border-accent/30 bg-accent-soft text-accent",
   pending: "border-premium/30 bg-premium-soft text-premium",
+  countered: "border-premium/30 bg-premium-soft text-premium",
   accepted: "border-success/25 bg-success/10 text-success",
+  completed: "border-success/25 bg-success/10 text-success",
   declined: "border-danger/25 bg-danger/10 text-danger",
   cancelled: "border-border bg-surface-2 text-ink-muted",
+  expired: "border-border bg-surface-2 text-ink-muted",
 };
 
 const STATUS_LABELS: Record<string, string> = {
   open: "Open to all",
   pending: "Awaiting reply",
+  countered: "New time proposed",
   accepted: "Match on",
-  declined: "Declined",
+  completed: "Played",
+  declined: "Rejected",
   cancelled: "Called off",
+  expired: "Expired",
 };
 
 export function ChallengeStatus({ c }: { c: Challenge }) {
-  const past = isPast(c) && (c.status === "open" || c.status === "pending");
+  const past = isPast(c) && (c.status === "open" || c.status === "pending" || c.status === "countered");
   return (
     <span
       className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1 text-xs font-semibold ${

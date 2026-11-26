@@ -42,7 +42,7 @@ export default function Home() {
             </Reveal>
             <Reveal delay={0.16}>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
-                The Arena brings teams, tournaments, grounds and rankings together across 10 sports — cricket to
+                The Arena brings teams, tournaments, grounds and challenges together across 10 sports — cricket to
                 kabaddi — in one premium platform built for players who take the game seriously.
               </p>
             </Reveal>

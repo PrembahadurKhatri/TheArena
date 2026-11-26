@@ -2,6 +2,8 @@ import request from "supertest";
 import app from "../src/app";
 import { User } from "../src/models/User";
 import { Ground } from "../src/models/Ground";
+import { Store } from "../src/models/Store";
+import { Product } from "../src/models/Product";
 
 export const api = () => request(app);
 
@@ -20,9 +22,20 @@ export async function registerUser(overrides: Partial<{ name: string; email: str
   return { token: res.body.token as string, id: res.body.user.id as string, email: body.email, password: body.password };
 }
 
+/** A Super Admin (full access), like the one the create-admin script makes. */
 export async function registerAdmin() {
   const u = await registerUser({ name: "Admin" });
-  await User.updateOne({ _id: u.id }, { $set: { role: "admin" } });
+  await User.updateOne({ _id: u.id }, { $set: { role: "admin", isSuperAdmin: true } });
+  return u;
+}
+
+/** A staff member (not Super Admin) with exactly these permission grants. */
+export async function registerStaff(grant: string[] = [], staffRole: string | null = null) {
+  const u = await registerUser({ name: "Staff" });
+  await User.updateOne(
+    { _id: u.id },
+    { $set: { role: "admin", isSuperAdmin: false, staffRole, permissionOverrides: { grant, revoke: [] } } }
+  );
   return u;
 }
 
@@ -45,5 +58,8 @@ export async function makeStoreWithProduct(token: string, product: { price?: num
     .set(auth(token))
     .send({ name: "Cricket Bat", category: "Bats", sport: "cricket", price: product.price ?? 5000, stock: product.stock ?? 10 });
   if (prod.status !== 201) throw new Error(`product failed: ${prod.status} ${JSON.stringify(prod.body)}`);
+  // Shops and products need staff approval; tests start from approved ones.
+  await Store.updateOne({ _id: store.body.store.id }, { $set: { status: "approved" } });
+  await Product.updateOne({ _id: prod.body.product.id }, { $set: { status: "active" } });
   return { storeId: store.body.store.id as string, productId: prod.body.product.id as string };
 }
