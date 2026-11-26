@@ -3,6 +3,7 @@
 //
 //   npm run seed:demo             create the demo data (once)
 //   npm run seed:demo -- --remove delete everything the demo created
+//   npm run seed:demo -- --images (re)draw the demo images and attach them
 //
 // Every demo account uses an @demo.thearena.test email, and everything else
 // hangs off those accounts, so --remove can find it all. All demo accounts
@@ -13,8 +14,7 @@ dotenv.config();
 // Demo addresses don't exist: make sure nothing is emailed.
 process.env.SMTP_HOST = "";
 
-import bcrypt from "bcrypt";
-import mongoose, { Types } from "mongoose";
+import mongoose from "mongoose";
 import { connectDB } from "../config/db";
 import { loadSportRegistry } from "../utils/sports";
 import { loadShopCategories } from "../utils/shopCategories";
@@ -54,7 +54,7 @@ import * as products from "../services/productsService";
 import * as orders from "../services/ordersService";
 import { createReview } from "../services/reviewsService";
 import { createAnnouncement } from "../services/notificationService";
-import { usernameKey } from "../utils/username";
+import { generateDemoArt } from "./demoArt";
 
 const DOMAIN = "demo.thearena.test";
 const PASSWORD = process.env.DEMO_PASSWORD || "ArenaDemo#2026";
@@ -115,6 +115,49 @@ async function makeUser(name: string, local: string, extra: Partial<IUser> = {})
 }
 
 const fresh = async (u: IUser) => (await User.findById(u._id))!;
+
+const FEMALE = new Set(["priya_s", "asmitaj", "tournaments", "grounds", "merchant"]);
+const PRODUCT_IMAGE: Record<string, string> = {
+  "Pro Futsal Ball (Size 4)": "ball", "Club Jersey": "jersey", "Indoor Court Shoes": "shoes", "English Willow Bat": "bat",
+  "Goalkeeper Gloves": "gloves", "Resistance Band Set": "bands", "Shin Guards": "shinguards",
+};
+
+// Draws the illustrated demo images (frontend/public/demo) and points the
+// demo records at them. Safe to run again.
+async function applyDemoImages() {
+  const users = await User.find({ email: DEMO_EMAIL }).select("email");
+  const teamOf = new Map<string, string>();
+  PLAYERS.forEach((p, i) => {
+    const t = TEAMS.find((t) => i >= t.from && i < t.from + 5);
+    if (t) teamOf.set(p.username, slugOf(t.name));
+  });
+  const people = users.map((u) => {
+    const key = u.email.split("@")[0];
+    return { key, team: teamOf.get(key), female: FEMALE.has(key) };
+  });
+  const out = generateDemoArt(people, TEAMS.map((t) => ({ slug: slugOf(t.name), name: t.name })));
+  for (const u of users) await User.updateOne({ _id: u._id }, { $set: { photo: `/demo/avatar-${u.email.split("@")[0]}.svg` } });
+  for (const t of TEAMS) {
+    const slug = slugOf(t.name);
+    await Team.updateOne({ name: t.name, owner: { $in: users.map((u) => u._id) } }, { $set: { logo: `/demo/team-${slug}.svg`, coverImage: `/demo/cover-${slug}.svg` } });
+  }
+  const stores = await Store.find({ owner: { $in: users.map((u) => u._id) } }).select("_id");
+  await Store.updateMany({ _id: { $in: stores.map((s) => s._id) } }, { $set: { logo: "/demo/store-himal.svg" } });
+  for (const [name, key] of Object.entries(PRODUCT_IMAGE)) {
+    const img = `/demo/product-${key}.svg`;
+    const p = await Product.findOneAndUpdate({ name, store: { $in: stores.map((s) => s._id) } }, { $set: { images: [img] } });
+    if (p) {
+      await Order.updateMany({ "items.product": p._id }, { $set: { "items.$[i].image": img } }, { arrayFilters: [{ "i.product": p._id }] });
+      await SellerOrder.updateMany({ "items.product": p._id }, { $set: { "items.$[i].image": img } }, { arrayFilters: [{ "i.product": p._id }] });
+    }
+  }
+  const owners = { owner: { $in: users.map((u) => u._id) } };
+  await Ground.updateOne({ name: "Dhuku Futsal Arena", ...owners }, { $set: { image: "/demo/ground-futsal.svg", images: ["/demo/ground-futsal.svg", "/demo/ground-indoor.svg"] } });
+  await Ground.updateOne({ name: "Baluwatar Indoor Court", ...owners }, { $set: { image: "/demo/ground-indoor.svg", images: ["/demo/ground-indoor.svg"] } });
+  console.log(`[seed:demo] images written to ${out} and attached to ${users.length} accounts, teams, the shop, products and grounds`);
+}
+
+const slugOf = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
 async function removeDemo() {
   const users = await User.find({ email: DEMO_EMAIL }).select("_id");
@@ -388,6 +431,8 @@ async function createDemo() {
   await Report.create({ reporter: players[4]._id, targetType: "team", targetId: lakeside._id, reason: "fake", details: "Demo report: claims to be the official Pokhara club." });
   await createAnnouncement(superAdmin, { title: "Welcome to The Arena (demo)", body: "This is demo data. Explore teams, the Valley Futsal Cup, Dhuku Futsal Arena and Himal Sports Gear." });
 
+  await applyDemoImages();
+
   console.log(`
 [seed:demo] done. Every demo account uses the password: ${PASSWORD}
 
@@ -412,12 +457,9 @@ async function main() {
   await loadShopCategories();
   await loadSettings();
   if (process.argv.includes("--remove")) await removeDemo();
+  else if (process.argv.includes("--images")) await applyDemoImages();
   else await createDemo();
 }
-
-void usernameKey;
-void Types;
-void bcrypt;
 
 main()
   .catch((err) => {

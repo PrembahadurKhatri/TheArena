@@ -84,7 +84,7 @@ function Wordmark({ isShop }: { isShop: boolean }) {
         )}
       </span>
       <span className="mt-1.5 hidden font-display text-[10px] font-semibold uppercase tracking-[0.32em] text-ink-faint sm:block">
-        {isShop ? "Gear for every game" : "Play Â· Compete Â· Rise"}
+        {isShop ? "Gear for every game" : "Play · Compete · Rise"}
       </span>
     </span>
   );

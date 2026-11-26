@@ -6,16 +6,22 @@ import { SPORTS } from "@/data/sports";
 import SportCard, { FeaturedSportCard } from "@/components/SportCard";
 import Reveal from "@/components/Reveal";
 import VideoModal from "@/components/VideoModal";
+import { useApi } from "@/hooks/useApi";
 
-const STATS = [
-  { label: "Sports covered", value: "10", icon: Trophy },
-  { label: "Teams & counting", value: "500+", icon: Users },
-  { label: "Grounds bookable", value: "50+", icon: Globe },
-  { label: "Tournaments hosted", value: "120+", icon: Calendar },
-];
+type SiteStats = { sports: number; teams: number; grounds: number; tournaments: number };
+
+// Real counts from the API (GET /api/meta/stats).
+const STAT_DEFS = [
+  { key: "sports", label: "Sports covered", icon: Trophy },
+  { key: "teams", label: "Teams registered", icon: Users },
+  { key: "grounds", label: "Grounds bookable", icon: Globe },
+  { key: "tournaments", label: "Tournaments", icon: Calendar },
+] as const;
 
 export default function Home() {
   const [videoOpen, setVideoOpen] = useState(false);
+  const { data: stats } = useApi<SiteStats>("/meta/stats");
+  const STATS = STAT_DEFS.map((d) => ({ ...d, value: stats ? stats[d.key].toLocaleString() : "–" }));
   const featuredSport = SPORTS.find((s) => s.slug === "football") ?? SPORTS[0];
   const otherSports = SPORTS.filter((s) => s.slug !== featuredSport.slug);
 
@@ -42,7 +48,7 @@ export default function Home() {
             </Reveal>
             <Reveal delay={0.16}>
               <p className="mt-6 max-w-xl text-lg leading-relaxed text-ink-muted">
-                The Arena brings teams, tournaments, grounds and challenges together across 10 sports — cricket to
+                The Arena brings teams, tournaments, grounds and challenges together across {stats?.sports ?? SPORTS.length} sports — cricket to
                 kabaddi — in one premium platform built for players who take the game seriously.
               </p>
             </Reveal>
