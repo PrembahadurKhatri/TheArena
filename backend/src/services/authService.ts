@@ -37,6 +37,40 @@ function hashResetToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+// Account emails (welcome, sign-in alert). Sent in the background: a slow or
+// failing mail server never delays or breaks sign-up/login. Skipped when SMTP
+// isn't configured and for reserved test domains (demo data).
+function sendAccountEmail(user: IUser, subject: string, lines: string[]) {
+  if (!process.env.SMTP_HOST || /\.(test|example|invalid|localhost)$/i.test(user.email)) return;
+  const site = getPrimaryClientUrl();
+  const text = [`Hi ${user.name},`, "", ...lines, "", site].join("\n");
+  const html =
+    `<p>Hi ${escapeHtml(user.name)},</p>` +
+    lines.map((l) => `<p>${escapeHtml(l)}</p>`).join("") +
+    `<p><a href="${site}">${site}</a></p>`;
+  void sendEmail({ to: user.email, subject, text, html }).catch((err) =>
+    console.warn(`[email] "${subject}" not sent:`, err?.message ?? err)
+  );
+}
+
+function sendWelcomeEmail(user: IUser) {
+  sendAccountEmail(user, "Welcome to The Arena", [
+    `Your account is ready. Your username is @${user.username}.`,
+    "Complete your profile, then find players and teams near you, join tournaments and book grounds.",
+  ]);
+}
+
+function sendSignInAlert(user: IUser) {
+  if (user.privacy?.emailNotifications === false) return;
+  const when = new Date().toLocaleString("en-GB", { timeZone: "Asia/Kathmandu", dateStyle: "medium", timeStyle: "short" });
+  sendAccountEmail(user, "New sign-in to your The Arena account", [
+    `Your account was just signed in to (${when}, Nepal time).`,
+    "If this was you, there's nothing to do. If it wasn't, reset your password now and use \"Log out everywhere\" in Settings.",
+  ]);
+}
+
 export async function registerUser(input: {
   name: string;
   email: string;
@@ -102,6 +136,7 @@ export async function registerUser(input: {
   }
 
   const token = signToken(user);
+  sendWelcomeEmail(user);
   return { token, user };
 }
 
@@ -134,6 +169,7 @@ export async function loginUser(input: { email: string; password: string }) {
   }
 
   const token = signToken(user);
+  sendSignInAlert(user);
   return { token, user };
 }
 
